@@ -171,6 +171,8 @@ def Data_prep(Land_cover):
 	ewres=info.ewres
 	L = []
 	L=[cl for cl in gscript.parse_command('r.category',map= Land_cover)]
+	for i,x in enumerate(L):
+		L[i]=x.encode('UTF8')
 	return nsres, ewres, L
 
 	
@@ -270,8 +272,13 @@ def RandomForest(vector,id):
 	
 	df_admin = pd.read_csv(csv_table)
 	df_grid = pd.read_csv(csv_table_grid)
-	min_class = min(lc_classes_list)
-	max_class = max(lc_classes_list)
+	
+	lc_classes_list_int=[]
+	for x in lc_classes_list:
+		lc_classes_list_int.append(int(x))
+
+	min_class = min(lc_classes_list_int)
+	max_class = max(lc_classes_list_int)
 
 	df_admin = df_admin.reindex_axis(sorted(df_admin.columns), axis=1)
 	df_grid = df_grid.reindex_axis(sorted(df_grid.columns), axis=1)
@@ -459,9 +466,9 @@ def main():
 		lc_classes_list = Data[2]
 	else:
 		lc_classes_list = lc_list
+	print "Classes of raster "+str(Land_cover.split("@")[0])+" to be used: "+",".join(lc_classes_list)
 	
-	
-	
+
 
 	
 	## creating a gridded vector: each grid has a size of "tile_size"
@@ -480,6 +487,7 @@ def main():
 				morpho_classes_list = Data_prep(morpho_zones.split("@")[0])[2]
 			else:
 				morpho_classes_list = morpho_list
+			print "Classes of raster "+str(morpho_zones.split("@")[0])+" to be used: "+",".join(morpho_classes_list)
 			grid_morpho = Parallel(n_jobs=n_jobs,backend="threading")(delayed(proportion_class_grid, check_pickle=False)(morpho_zones.split("@")[0], 'grid_vect', tile_size, nsres, ewres,cl, "_morpho",) for cl in morpho_classes_list)
 			admin_morpho = Parallel(n_jobs=n_jobs,backend="threading")(delayed(proportion_class_admin, check_pickle=False)(vector.split("@")[0], cl, "_morpho",) for cl in morpho_classes_list)
 	
