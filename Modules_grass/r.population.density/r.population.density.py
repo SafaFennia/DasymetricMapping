@@ -157,7 +157,7 @@ except:
 	
 
 def cleanup():
-    gscript.run_command('g.remove', type='raster', name=','.join(TMP_MAPS), flags='f')	
+    gscript.run_command('g.remove', quiet=True, type='raster', name=','.join(TMP_MAPS), flags='f')	
 	
 
 	
@@ -196,7 +196,7 @@ def proportion_class_grid(rasterLayer, vectorLayer, tile_size,nsres,ewres, cl, o
 	gscript.run_command('r.resamp.stats',  input=building, output=somme, method='sum',overwrite=True)#Somme
 	gscript.run_command('r.mapcalc', expression= proportion+'= ((('+ somme+')*('+str(ewres*nsres)+')  / ('+str(int(tile_size)**2)+'))*100) ', overwrite=True)
 	#filling the attribute table whith this proportion
-	gscript.run_command('v.what.rast', map_=vectorLayer, type='centroid', raster=proportion, column= "proportion_"+str(cl)+opt)
+	gscript.run_command('v.what.rast', quiet=True, map_=vectorLayer, type='centroid', raster=proportion, column= "proportion_"+str(cl)+opt)
 
 		
 		
@@ -208,8 +208,8 @@ def admin_boundaries(vector, id):
 	'''
 	
 	gscript.run_command('g.region', raster=Land_cover.split("@")[0], res=tile_size)
-	gscript.run_command('v.to.rast', input= vector, type='area', output=vector+'_rast', use='cat', overwrite=True)
-	gscript.run_command('r.to.vect', input=vector+'_rast', output= vector+'_rastTovect', type='area', column=id, flags='v',overwrite=True)
+	gscript.run_command('v.to.rast', quiet=True, input= vector, type='area', output=vector+'_rast', use='cat', overwrite=True)
+	gscript.run_command('r.to.vect', quiet=True, input=vector+'_rast', output= vector+'_rastTovect', type='area', column=id, flags='v',overwrite=True)
 	gscript.run_command('v.db.join', map=vector+'_rastTovect', column='cat',other_table=vector, other_column='cat')
 
 	
@@ -219,7 +219,7 @@ def proportion_class_admin(vector, cl, opt=""):
 	Function calculating classes' proportions within each administrative unit
 	'''
 
-	gscript.run_command('v.rast.stats', map=vector+'_rastTovect',raster='proportion_binary_class_'+str(cl)+opt, column_prefix='proportion_'+str(cl)+opt, method='average', flags='c')
+	gscript.run_command('v.rast.stats', quiet=True, map=vector+'_rastTovect',raster='proportion_binary_class_'+str(cl)+opt, column_prefix='proportion_'+str(cl)+opt, method='average', flags='c')
 
 
 		
@@ -467,9 +467,9 @@ def main():
 	## creating a gridded vector: each grid has a size of "tile_size"
 	gscript.run_command('g.region', raster= Land_cover.split("@")[0], res=tile_size)
 	gscript.mapcalc("empty_grid=rand(0 ,999999999 )", overwrite=True,seed='auto' ) #creating a raster with random values
-	gscript.run_command('r.clump',input='empty_grid',output='empty_grid_Clump',overwrite=True) #assigning a unique value to each grid  
-	gscript.run_command('r.to.vect',input='empty_grid_Clump',output='grid_vect', type='area', overwrite=True) #raster to vector
-	
+	gscript.run_command('r.clump', quiet=True, input='empty_grid',output='empty_grid_Clump',overwrite=True) #assigning a unique value to each grid  
+	gscript.run_command('r.to.vect',quiet=True, input='empty_grid_Clump',output='grid_vect', type='area', overwrite=True) #raster to vector
+
 	
 	## calculating classes' proportions within each grid and administrative unit
 	admin_boundaries(vector.split("@")[0], id)
