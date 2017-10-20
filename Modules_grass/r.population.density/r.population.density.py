@@ -277,14 +277,20 @@ def RandomForest(vector,id):
 	min_class = lc_classes_list[0]   #Save the first item of the list as the minimum class category (ordered list)
 	max_class = lc_classes_list[-1]  #Save the last item of the list as the maximum class category (ordered list)
 	
-	## changing null values to zero
+	## Changing null values to zero
+	# for df_grid
 	features = df_grid.columns[:]
 	for i in features:
-		for j in range(len(df_grid)):
-			if(type(df_grid[i].values[j]) != unicode):
-				if(ma.isnan(float(df_grid[i].values[j]))):
-					df_grid[i].values[j] = 0
+		df_grid[i].fillna(0, inplace=True)
+	# for df_admin
+	features = df_admin.columns[:]
+	for i in features:
+		df_admin[i].fillna(0, inplace=True)
+	
+	## Saving variable to predict (dependent variable)
 	y = df_admin['log_population_density']
+	
+	## Saving variables for prediction (independent variables)
 	if (morpho_zones == ''):			
 		x = df_admin.loc[:,'proportion_'+min_class+'_average':'proportion_'+max_class+'_average']
 		x_grid = df_grid.loc[:,'proportion_'+min_class :'proportion_'+max_class]
