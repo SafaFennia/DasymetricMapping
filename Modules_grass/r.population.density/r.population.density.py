@@ -161,16 +161,16 @@ def cleanup():
 	
 
 	
-def Data_prep(Land_cover):
+def Data_prep(categorical_raster):
 	'''
-	Function that extracts informations from the Land Cover : resolution and classes
+	Function that extracts resolution and sorted list of classes. Expected to be used with a categorical raster (like land cover or land use information).
 	'''
 	
-	info = gscript.raster_info(Land_cover)
+	info = gscript.raster_info(categorical_raster)
 	nsres=info.nsres
 	ewres=info.ewres
 	L = []
-	L=[cl for cl in gscript.parse_command('r.category',map= Land_cover)]
+	L=[cl for cl in gscript.parse_command('r.category',map=categorical_raster)]
 	for i,x in enumerate(L):  #Make sure the format is UTF8 and not Unicode
 		L[i]=x.encode('UTF8')
 	L.sort(key=float) #Sort the raster categories in ascending.
