@@ -316,7 +316,7 @@ def RandomForest(vector,id):
 	# Distance raster
 	if(distance_to != ''): 
 		x_distance = df_admin['distance_average']
-		x_grid_distance = df_grid['distance']
+		x_grid_distance = df_grid['distance_average']
 		x = pd.concat((x,x_distance), axis=1)
 		x_grid = pd.concat((x_grid,x_grid_distance), axis=1)
 			
@@ -498,7 +498,7 @@ def main():
 	
 	## adding distance to places of interest data to the attribute table of the gridded vector and calculate its mean for each administrative unit
 	if(distance_to !=''):
-		gscript.run_command('v.what.rast', map='grid_vect', type='centroid', raster=distance_to, column='distance')
+		gscript.run_command('v.rast.stats', map='grid_vect', raster=distance_to, column_prefix='distance', method='average', flags='c')
 		gscript.run_command('v.rast.stats', map=vector.split("@")[0]+'_rastTovect', raster=distance_to, column_prefix='distance', method='average', flags='c')
 	
 	## Random Forest
