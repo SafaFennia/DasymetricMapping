@@ -171,8 +171,9 @@ def Data_prep(Land_cover):
 	ewres=info.ewres
 	L = []
 	L=[cl for cl in gscript.parse_command('r.category',map= Land_cover)]
-	for i,x in enumerate(L):
+	for i,x in enumerate(L):  #Make sure the format is UTF8 and not Unicode
 		L[i]=x.encode('UTF8')
+	L.sort(key=float) #Sort the raster categories in ascending.
 	return nsres, ewres, L
 
 	
@@ -272,16 +273,10 @@ def RandomForest(vector,id):
 	
 	df_admin = pd.read_csv(csv_table)
 	df_grid = pd.read_csv(csv_table_grid)
+
+	min_class = lc_classes_list[0]   #Save the first item of the list as the minimum class category (ordered list)
+	max_class = lc_classes_list[-1]  #Save the last item of the list as the maximum class category (ordered list)
 	
-	lc_classes_list_int=[]
-	for x in lc_classes_list:
-		lc_classes_list_int.append(int(x))
-
-	min_class = min(lc_classes_list_int)
-	max_class = max(lc_classes_list_int)
-
-	df_admin = df_admin.reindex_axis(sorted(df_admin.columns), axis=1)
-	df_grid = df_grid.reindex_axis(sorted(df_grid.columns), axis=1)
 	## changing null values to zero
 	features = df_grid.columns[:]
 	for i in features:
@@ -291,8 +286,8 @@ def RandomForest(vector,id):
 					df_grid[i].values[j] = 0
 	y = df_admin['log_population_density']
 	if (morpho_zones == ''):			
-		x = df_admin.loc[:,'proportion_'+str(min_class)+'_average':'proportion_'+str(max_class)+'_average']
-		x_grid = df_grid.loc[:,'proportion_'+str(min_class) :'proportion_'+str(max_class)]
+		x = df_admin.loc[:,'proportion_'+min_class+'_average':'proportion_'+max_class+'_average']
+		x_grid = df_grid.loc[:,'proportion_'+min_class :'proportion_'+max_class]
 		if(distance_to != ''): 
 			x_distance = df_admin['distance_average']
 			x_grid_distance = df_grid['distance']
@@ -306,8 +301,8 @@ def RandomForest(vector,id):
 		c = '_morpho' if (max_category == max_morpho) else ""
 
 
-		x = df_admin.loc[:,'proportion_'+str(min_category):'proportion_'+str(max_category)+c+"_average"]
-		x_grid = df_grid.loc[:,'proportion_'+str(min_category):'proportion_'+str(max_category)+c]
+		x = df_admin.loc[:,'proportion_'+min_category:'proportion_'+max_category+c+"_average"]
+		x_grid = df_grid.loc[:,'proportion_'+min_category:'proportion_'+max_category+c]
 		if(distance_to != ''): 
 			x_distance = df_admin['distance_average']
 			x_grid_distance = df_grid['distance']
@@ -417,7 +412,6 @@ def main():
 
     # is  id column numeric?
 	coltype = gscript.vector_columns(vector)[id]['type']
-	
 	if coltype not in ('INTEGER'):
 		gscript.fatal(_("<%s> column must be Integer")% (id))
 	
@@ -427,7 +421,6 @@ def main():
 	
 	# is  population column numeric?
 	coltype = gscript.vector_columns(vector)[population]['type']
-	
 	if coltype not in ('INTEGER', 'DOUBLE PRECISION'):
 		gscript.fatal(_("<%s> column must be numeric")% (population))	
 	
@@ -449,6 +442,7 @@ def main():
 		result = gscript.find_file(morpho_zones, element='cell')
 		if (len(result['name']) == 0):
 			gscript.fatal(_("Input morpho zones <%s> not found") % morpho_zones)
+	
 	# distance_to exists?
 	if (distance_to !=''):
 		result = gscript.find_file(distance_to, element='cell')
@@ -458,6 +452,8 @@ def main():
 	# valid n_jobs?
 	if(n_jobs > multiprocessing.cpu_count()):
 		gscript.fatal(_("Invalid n_jobs <%s>") % n_jobs)
+	
+	
 	# data preparation : extract classes and resolution from the Land Cover 
 	Data = Data_prep(Land_cover)
 	nsres = Data[0] ## north-south resolution
@@ -468,8 +464,6 @@ def main():
 		lc_classes_list = lc_list
 	print "Classes of raster "+str(Land_cover.split("@")[0])+" to be used: "+",".join(lc_classes_list)
 	
-
-
 	
 	## creating a gridded vector: each grid has a size of "tile_size"
 	gscript.run_command('g.region', raster= Land_cover.split("@")[0], res=tile_size)
