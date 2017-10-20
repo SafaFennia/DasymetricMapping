@@ -273,9 +273,6 @@ def RandomForest(vector,id):
 	
 	df_admin = pd.read_csv(csv_table)
 	df_grid = pd.read_csv(csv_table_grid)
-
-	min_class = lc_classes_list[0]   #Save the first item of the list as the minimum class category (ordered list)
-	max_class = lc_classes_list[-1]  #Save the last item of the list as the maximum class category (ordered list)
 	
 	## Changing null values to zero
 	# for df_grid
@@ -286,34 +283,42 @@ def RandomForest(vector,id):
 	features = df_admin.columns[:]
 	for i in features:
 		df_admin[i].fillna(0, inplace=True)
-	
+	min_class = lc_classes_list[0]   #Save the first item of the list as the minimum class category (ordered list)
+	max_class = lc_classes_list[-1]  #Save the last item of the list as the maximum class category (ordered list)
+
 	## Saving variable to predict (dependent variable)
 	y = df_admin['log_population_density']
 	
-	## Saving variables for prediction (independent variables)
-	if (morpho_zones == ''):			
-		x = df_admin.loc[:,'proportion_'+min_class+'_average':'proportion_'+max_class+'_average']
-		x_grid = df_grid.loc[:,'proportion_'+min_class :'proportion_'+max_class]
-		if(distance_to != ''): 
-			x_distance = df_admin['distance_average']
-			x_grid_distance = df_grid['distance']
-			x = pd.concat((x,x_distance), axis=1)
-			x_grid = pd.concat((x_grid,x_grid_distance), axis=1)
-	else:
-		min_morpho = min(morpho_classes_list)
-		max_morpho = max(morpho_classes_list)
-		min_category = min(min_morpho,min_class)
-		max_category = max(max_morpho,max_class)
-		c = '_morpho' if (max_category == max_morpho) else ""
+	## Saving variables for prediction (independent variables)     
+	# Land cover raster 
+	admin_column_name_list=[]
+	grid_column_name_list=[]
+	for class_category in lc_classes_list:  #Create lists with columns name to be selected from the dataframes for both administratives zones and grids
+		admin_column_name_list.append('proportion_'+class_category+'_average')
+		grid_column_name_list.append('proportion_'+class_category)   
+	x=df_admin[admin_column_name_list]  #Get a dataframe with independent variables for administratives units
+	x_grid=df_grid[grid_column_name_list] #Get a dataframe with independent variables for grids
 
+	# Other raster 
+	if (morpho_zones != ''):
+		min_morpho = morpho_classes_list[0]
+		max_morpho = morpho_classes_list[-1]
+		admin_column_name_list=[]
+		grid_column_name_list=[]
+		for class_category in morpho_classes_list:  #Create lists with columns name to be selected from the dataframes for both administratives zones and grids
+			admin_column_name_list.append('proportion_'+class_category+'_morpho'+'_average')
+			grid_column_name_list.append('proportion_'+class_category+'_morpho')  
+		x_morpho=df_admin[admin_column_name_list]  #Get a dataframe with independent variables for administratives units
+		x_grid_morpho=df_grid[grid_column_name_list] #Get a dataframe with independent variables for grids
+		x = pd.concat((x,x_morpho), axis=1)
+		x_grid = pd.concat((x_grid,x_grid_morpho), axis=1)
 
-		x = df_admin.loc[:,'proportion_'+min_category:'proportion_'+max_category+c+"_average"]
-		x_grid = df_grid.loc[:,'proportion_'+min_category:'proportion_'+max_category+c]
-		if(distance_to != ''): 
-			x_distance = df_admin['distance_average']
-			x_grid_distance = df_grid['distance']
-			x = pd.concat((x,x_distance), axis=1)
-			x_grid = pd.concat((x_grid,x_grid_distance), axis=1)
+	# Distance raster
+	if(distance_to != ''): 
+		x_distance = df_admin['distance_average']
+		x_grid_distance = df_grid['distance']
+		x = pd.concat((x,x_distance), axis=1)
+		x_grid = pd.concat((x_grid,x_grid_distance), axis=1)
 			
 	
 	
