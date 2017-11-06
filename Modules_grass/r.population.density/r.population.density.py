@@ -152,6 +152,7 @@ try:
 except:
     gscript.fatal("Scikit learn 0.18 or newer is not installed")
 
+##TODO: Add check for presence of negative of null values in the population column of the administrative unit vector layer. If presence, a error message should appeared because ma.log() would crash anyway
 
 def cleanup():
     gscript.run_command('g.remove', quiet=True, type='raster', name=','.join(TMP_MAPS), flags='fb')   ##TODO Add removing of temporary csv files
