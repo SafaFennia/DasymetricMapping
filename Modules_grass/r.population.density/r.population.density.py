@@ -4,11 +4,11 @@
 #*
 #* MODULE:     r.population.density
 #*
-#* AUTHOR(S):  Safa Fennia
+#* AUTHOR(S):  Safa Fennia, Grippa Tais
 #*
 #* PURPOSE:    Create a population density map
 #*
-#* COPYRIGHT:  (C) 2017 Safa Fennia
+#* COPYRIGHT:  (C) 2017 Safa Fennia, Grippa Tais
 #*             ANAGEO, Université libre de Bruxelles, Belgique
 #*
 #*
