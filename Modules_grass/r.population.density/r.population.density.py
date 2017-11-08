@@ -505,6 +505,8 @@ def RandomForest(vector,id):
     plt.ylim([-1,len(y_axis)])
     plt.xlim([-0.04,max(x_axis)+0.04])
     plt.title("Feature importances")
+    if not os.path.exists(os.path.split(plot)[0]):  #Create folder where to save the plot if not exists
+        os.makedirs(os.path.split(plot)[0])
     plt.savefig(plot+'.png', bbox_inches='tight', dpi=400)
 
     print('oob_score = '+str(regressor.oob_score_))
