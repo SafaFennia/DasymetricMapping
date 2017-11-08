@@ -193,8 +193,8 @@ def admin_boundaries(vector, id):
     '''
     gscript.run_command('g.region', raster='clumped_grid')
     gscript.run_command('v.to.rast', quiet=True, input=vector, type='area', output='gridded_admin_units', use='attr', attribute_column=id, overwrite=True)
-    gscript.run_command('r.to.vect', quiet=True, input='gridded_admin_units', output=vector.split("@")[0]+str(tile_size)+'m_gridded', type='area', column=id, flags='v',overwrite=True)
-    gscript.run_command('v.db.join', map_=vector.split("@")[0]+str(tile_size)+'m_gridded', column='cat', other_table=vector, other_column=id, subset_columns=population) #join the population count
+    gscript.run_command('r.to.vect', quiet=True, input='gridded_admin_units', output=vector.split("@")[0]+'_'+str(tile_size)+'m_gridded', type='area', column=id, flags='v',overwrite=True)
+    gscript.run_command('v.db.join', map_=vector.split("@")[0]+'_'+str(tile_size)+'m_gridded', column='cat', other_table=vector, other_column=id, subset_columns=population) #join the population count
     print "Create raster of administrative units with spatial resolution of "+str(tile_size)+" meters"
     TMP_MAPS.append("gridded_admin_units")
 
@@ -381,12 +381,12 @@ def RandomForest(vector,id):
     # Join to each gridded administrative unit the population, the area and all the statistics
     gscript.run_command('db.in.ogr', quiet=True, overwrite=True, input=os.path.join(outputdirectory_admin,"area.csv"), output='area_admin') #Import the temporary .csv containing the area of the gridded administrative unit
     gscript.run_command('db.in.ogr', quiet=True, overwrite=True, input=os.path.join(outputdirectory_admin,"all_stats.csv"), output='stat_admin') #Import the temporary .csv containing the statistics of the gridded administrative unit
-    gscript.run_command('v.db.join', quiet=True, map_=vector.split("@")[0]+str(tile_size)+'m_gridded', column='cat', other_table='area_admin', other_column='cat_', subset_columns='area') # Join the table containing the area
-    gscript.run_command('v.db.join', quiet=True, map_=vector.split("@")[0]+str(tile_size)+'m_gridded', column='cat', other_table='stat_admin', other_column='cat_') # Join the table containing the statistics
+    gscript.run_command('v.db.join', quiet=True, map_=vector.split("@")[0]+'_'+str(tile_size)+'m_gridded', column='cat', other_table='area_admin', other_column='cat_', subset_columns='area') # Join the table containing the area
+    gscript.run_command('v.db.join', quiet=True, map_=vector.split("@")[0]+'_'+str(tile_size)+'m_gridded', column='cat', other_table='stat_admin', other_column='cat_') # Join the table containing the statistics
     # Compute the log of population density
-    gscript.run_command('v.db.addcolumn', quiet=True, map_=vector.split("@")[0]+str(tile_size)+'m_gridded', column= "log_population_density double precision")  #add a new column which will contain the log of density
+    gscript.run_command('v.db.addcolumn', quiet=True, map_=vector.split("@")[0]+'_'+str(tile_size)+'m_gridded', column= "log_population_density double precision")  #add a new column which will contain the log of density
     admin_attribute_table=os.path.join(outputdirectory_admin,"admin_attribute.csv") # Define the path to the .csv
-    gscript.run_command('db.out.ogr', quiet=True, overwrite=True, input=vector.split("@")[0]+str(tile_size)+'m_gridded', output=admin_attribute_table , format='CSV') #Export the attribute table in .csv
+    gscript.run_command('db.out.ogr', quiet=True, overwrite=True, input=vector.split("@")[0]+'_'+str(tile_size)+'m_gridded', output=admin_attribute_table , format='CSV') #Export the attribute table in .csv
     attr_table = pd.read_csv(admin_attribute_table) #reading the csv file as dataframe
     # Filling the log population density column
     log = attr_table['log_population_density']
