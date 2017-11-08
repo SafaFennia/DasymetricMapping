@@ -244,7 +244,7 @@ def create_clumped_grid(tile_size):
     print "Create a grid raster with spatial resolution of "+str(tile_size)+" meters"
 
 
-def create_binary_raster(rasterLayer, cl, opt=""):
+def create_binary_raster(rasterLayer, cl, opt=""):      ##TODO: Change the name accros the script to be more clear to which layer it correspond to
     #Create a binary raster for the current class
     binary_class = "class_"+cl+opt
     gscript.run_command('r.mapcalc', expression=binary_class+'=if('+rasterLayer+'=='+str(cl)+',1,0)',overwrite=True)
@@ -413,7 +413,7 @@ def RandomForest(vector,id):
     for i in features:
         df_admin[i].fillna(0, inplace=True)
 
-    ## Make a list with name of covariables columns
+    ## Make a list with name of covariables columns        ##TODO: Again, it could be great to have more explicit co-variables names in the output plot with feature importances
     list_covar=[]
     for lc in lc_classes_list:
         list_covar.append("class_"+lc+"_sum")
@@ -517,7 +517,7 @@ def main():
     # user's values
     vector = options['vector']
     Land_cover = options['land_cover']
-    morpho_zones = options['raster'] if options['raster'] else ""
+    morpho_zones = options['raster'] if options['raster'] else ""    #TODO: Change the name of 'morpho_zones' in 'Land_use'
     distance_to = options['distance_to'] if options['distance_to'] else ""
     tile_size = options['tile_size']
     id = options['id']
@@ -526,7 +526,7 @@ def main():
     output = options['output']
     plot = options['plot']
     lc_list = options['lc_list'].split(",") if options['lc_list'] else ""
-    morpho_list = options['raster_list'].split(",") if options['raster_list'] else ""
+    morpho_list = options['raster_list'].split(",") if options['raster_list'] else ""  #TODO: Change the name of 'morpho_list' in 'lu_list'
     distance_to = options['distance_to'] if options['distance_to'] else ""
     n_jobs = int(options['n_jobs'])
 
@@ -578,6 +578,8 @@ def main():
     if(n_jobs > multiprocessing.cpu_count()):
         gscript.fatal(_("Invalid n_jobs <%s>") % n_jobs)
 
+    ##TODO: Add check if 'i.segment.stats' addon is well installed
+
     ## Create temporary directory(-ies) for output
     create_tempdirs()
 
@@ -589,6 +591,8 @@ def main():
 
     ## Compute area of administrative zones (raster)
     area_gridded_admin()
+
+##TODO: Add check if lc_list and raster_list prodided by user well exists in the corresponding rasters
 
     # Data preparation : extract list of classes from the Land Cover
     if (lc_list == ""):
