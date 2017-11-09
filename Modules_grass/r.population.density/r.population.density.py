@@ -456,7 +456,7 @@ def RandomForest(vector,id):
     for i, cat in enumerate(cat_list):
         rule+=str(cat)
         rule+="="
-        rule+=str(int(round(weight_list[i]*10000,0))) #Reclasse with random forest prediction of population density by hectares
+        rule+=str(int(round(weight_list[i]*1000000000,0)))
         rule+="\n"
     rule+="*"
     rule+="="
@@ -471,7 +471,7 @@ def RandomForest(vector,id):
     ## Reclass segments raster layer to keep only training segments, using the reclas_rule.csv file
     gscript.run_command('g.region', raster='clumped_grid')
     gscript.run_command('r.reclass', quiet=True, overwrite=True, input="clumped_grid", output="weight_int", rules=outputcsv)
-    gscript.run_command('r.mapcalc', expression="weight_float=float(weight_int)/float(10000)", quiet=True, overwrite=True)
+    gscript.run_command('r.mapcalc', expression="weight_float=float(weight_int)/float(1000000000)", quiet=True, overwrite=True) #Get back to prediction of population density in squared meters
     TMP_MAPS.append("weight_int")
     TMP_MAPS.append("weight_float")
 
@@ -509,7 +509,7 @@ def RandomForest(vector,id):
         os.makedirs(os.path.split(plot)[0])
     plt.savefig(plot+'.png', bbox_inches='tight', dpi=400)
 
-    print('oob_score = '+str(regressor.oob_score_))
+    print('oob_score = '+str(regressor.oob_score_))  ##TODO: Allow to create a log text file with value of OOB
 
 
 def main():
