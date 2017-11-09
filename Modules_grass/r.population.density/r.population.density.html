@@ -1,116 +1,37 @@
-<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
-<html>
-<head>
-<title>GRASS GIS manual: r.population.density.py</title>
-<meta http-equiv="Content-Type" content="text/html; charset=iso-8859-1">
-<link rel="stylesheet" href="grassdocs.css" type="text/css">
-</head>
-<body bgcolor="white">
-<div id="container">
-<a href="index.html"><img src="grass_logo.png" alt="GRASS logo"></a>
-<hr class="header">
-<h2>NAME</h2>
-<em><b>r.population.density.py</b></em>  - Creates a weighting layer with Random Forest for population redistribution
-<h2>KEYWORDS</h2>
-<a href="Land_Cover,_Density,_Population,_Dasymetry,_Random_Forest.html">Land Cover, Density, Population, Dasymetry, Random Forest</a>
-<h2>SYNOPSIS</h2>
-<div id="name"><b>r.population.density.py</b><br></div>
-<b>r.population.density.py --help</b><br>
-<div id="synopsis"><b>r.population.density.py</b> <b>vector</b>=<em>name</em> <b>land_cover</b>=<em>name</em>  [<b>raster</b>=<em>name</em>]   [<b>distance_to</b>=<em>name</em>]  <b>tile_size</b>=<em>value</em> <b>id</b>=<em>string</em> <b>population</b>=<em>string</em> <b>area</b>=<em>string</em>  [<b>built_up_category</b>=<em>integer</em>]  <b>output</b>=<em>name</em> <b>png</b>=<em>name</em>  [<b>lc_list</b>=<em>string</em>]   [<b>raster_list</b>=<em>string</em>]  <b>n_jobs</b>=<em>integer</em>  [--<b>overwrite</b>]  [--<b>help</b>]  [--<b>verbose</b>]  [--<b>quiet</b>]  [--<b>ui</b>] 
-</div>
-<div id="flags">
-<h3>Flags:</h3>
-<dl>
-<dt><b>--overwrite</b></dt>
-<dd>Allow output files to overwrite existing files</dd>
-<dt><b>--help</b></dt>
-<dd>Print usage summary</dd>
-<dt><b>--verbose</b></dt>
-<dd>Verbose module output</dd>
-<dt><b>--quiet</b></dt>
-<dd>Quiet module output</dd>
-<dt><b>--ui</b></dt>
-<dd>Force launching GUI dialog</dd>
-</dl>
-</div>
-<div id="parameters">
-<h3>Parameters:</h3>
-<dl>
-<dt><b>vector</b>=<em>name</em>&nbsp;<b>[required]</b></dt>
-<dd>Name of input vector map</dd>
-<dd>Input file: Vector where the attribute table contains the ID,the census data and the area of each administrative unit</dd>
-<dt><b>land_cover</b>=<em>name</em>&nbsp;<b>[required]</b></dt>
-<dd>Input file: Land Cover</dd>
-<dt><b>raster</b>=<em>name</em></dt>
-<dd>Input file: raster( Land use, morphological areas...)</dd>
-<dt><b>distance_to</b>=<em>name</em></dt>
-<dd>Input raster: distance to zones of interest</dd>
-<dt><b>tile_size</b>=<em>value</em>&nbsp;<b>[required]</b></dt>
-<dd>Tile_size</dd>
-<dt><b>id</b>=<em>string</em>&nbsp;<b>[required]</b></dt>
-<dd>Identifier column for administrative units</dd>
-<dt><b>population</b>=<em>string</em>&nbsp;<b>[required]</b></dt>
-<dd>Census data column</dd>
-<dt><b>area</b>=<em>string</em>&nbsp;<b>[required]</b></dt>
-<dd>Area column</dd>
-<dt><b>built_up_category</b>=<em>integer</em></dt>
-<dd>Built_up_category</dd>
-<dt><b>output</b>=<em>name</em>&nbsp;<b>[required]</b></dt>
-<dd>Name for output weighting layer</dd>
-<dt><b>png</b>=<em>name</em>&nbsp;<b>[required]</b></dt>
-<dd>Name for output plot</dd>
-<dt><b>lc_list</b>=<em>string</em></dt>
-<dd>Land Cover's categories to be used</dd>
-<dd>Format: 1 2 3 thru 7 *</dd>
-<dt><b>raster_list</b>=<em>string</em></dt>
-<dd>list of additional raster categories to be used</dd>
-<dd>Format: 1 2 3 thru 7 *</dd>
-<dt><b>n_jobs</b>=<em>integer</em>&nbsp;<b>[required]</b></dt>
-<dd>Size of the thread-pool for the parallel process</dd>
-</dl>
-</div>
 <h2>DESCRIPTION</h2>
 
-<em>Densite_population</em> Creates a Random Forest model trained at 
-the level of the administrative units and predict a weight for each 
-grid of the output layer.
+<em>r.population.density</em> creates a weighting layer to be used for redistribution of population count known at some administrative unit level into a raster grid with a finest spatial resolution <em><a href="https://en.wikipedia.org/wiki/Dasymetric_map">(dasymetric mapping)</a></em>. The addon trains a Random Forest (regression) model at the level of administratives units and predict a weight in a raster grid. The spatial resolution of this raster should be specified via the <b>tile_size</b> parameter, and its name via the <b>output</b> parameter.
 
-<p> Random Forest's covariates are essentially the proportion of each 
-Land cover's class.The response variable of the model is the log population
-density which represents the weight of each grid.
-A weight of 0 is set for each grid whose built-up proportion is null.
+<p> Random Forest's explanatory variables (i.e. covariates, predictors) are essentially the proportion of each class of a land cover map (<b>land_cover</b> parameter). Optionnally, other variables can be added to the model. It includes proportion of any other raster's class (like land use map...) passed through the <b>raster</b> parameter, and/or a raster of distance to nearest point of interest (e.g. distance to the nearest road, school, hospital, university...) passed through the <b>distance_to</b> parameter.
 
-<p> Other covariates can optionally be added to the model. It includes 
-proportion of any other raster's class (input file: Land Use, Urban morphological areas...
-) and distance to zones of interest (input file: raster whose grids represent distance to the 
-nearst point of interest: school, hospital, university...).
+<p> The administrative units should be provided as a vector layer using the <b>vector</b> parameter. Regarding to the attribute table connected to this vector layer, a column containing a unique identifier should be specified via the <b>id</b> parameter and the column containing the value to be use as response variable (population count or any other response variable) via the <b>population</b> parameter.
 
-<p> The oob_score of the model will be printed in the console and the output files
-are a weighting layer and a plot representing the covariates importances.
+<p> It is possible to not use all the classes whether for the land cover map or for the optional raster. For that purpose, a list of classes to be used should be specified via the <b>lc_list</b> parameter (for land cover map) or the <b>raster_list</b> parameter (for an additional map).
+
+<p> The <em><a href="https://en.wikipedia.org/wiki/Out-of-bag_error">out-of-bag error</a></em> of the model is printed in the console and give an indication about the internal accuracy of the model (cross-validation on training set at the administrative units level). Feature importances in the model are ploted in a graph, whose name have to be specified via the <b>plot</b> parameter.
+
+<p> The addon support parallel processing. The number of cores to be used should be specify via the <b>n_jobs</b> parameter. 
+
 
 <h2>NOTES</h2>
 
-<p> It is possible to not use all the classes whether for the Land Cover or 
-for the optional raster in the Random Forest model. A list of classes to be used 
-is then required.
+<p> As the model is trained to predict the napierian logarithm of the response variable, it is mandatory to not have zero or negative values in the column countaining the response variable. For the same reason, the model is unable to predict a zero weight value. It is possible to force weighting layer's grids with a value of zero if a specific class (specified via the <b>built_up_category</b> parameter) is absent in those grids.
 
-<p> Tasks are executed in parallel. That's why a size of the thread-pool is required.
-more information are about this parameter are <a href="https://pythonhosted.org/joblib/generated/joblib.Parallel.html">here</a>
   
-<h2>Examples</h2>
-
-<h3>Validation of population estimation</h3>
-	 
+<h2>EXAMPLE</h2>
 
 <div class="code"><pre>
-# set region and resolution
-g.region raster=Land_cover res=gscript.raster_info(Land_cover)
-# generate a weighting layer
-Densite_population vector=admon_units Land_cover=Land_cover
-					raster = morpho_refined tile_size=100
-					id=Sect_ID population=Total area=Area
-					built_up_category=11 output=weight
-					png=F://importances_plot
+# Generate a weighting layer using land cover map
+r.population.density.py vector=admin_level_4 land_cover=my_landcover_map tile_size=100 id=CAT population=pop_tot output=weighting_raster_100m plot=/home/user/importance_plot n_jobs=4
+
+# Generate a weighting layer using land cover map and land use map
+r.population.density.py vector=admin_level_4 land_cover=my_landcover_map raster=my_landuse_map tile_size=100 id=CAT population=pop_tot output=weighting_raster_100m plot=/home/user/importance_plot n_jobs=4
+
+# Generate a weighting layer using land cover map, land use map and distance to nearest school
+r.population.density.py vector=admin_level_4 land_cover=my_landcover_map raster=my_landuse_map distance_to=nearest_school tile_size=100 id=CAT population=pop_tot output=weighting_raster_100m plot=/home/user/importance_plot n_jobs=4
+
+# Generate a weighting layer using only category 3,4 of land cover map, category 8,9 of land use map and distance to nearest school
+r.population.density.py vector=admin_level_4 land_cover=my_landcover_map raster=my_landuse_map distance_to=nearest_school tile_size=100 id=CAT population=pop_tot output=weighting_raster_100m plot=/home/user/importance_plot lc_list=3,4 raster_list=8,9 n_jobs=4
 </pre></div>
 
 <center>
@@ -123,6 +44,12 @@ Densite_population vector=admon_units Land_cover=Land_cover
 </div>
 </center>
 
+<h2>REFERENCES</h2>
+
+Stevens, Forrest R, Andrea E Gaughan, Catherine Linard, and Andrew J Tatem. 2015. 
+“Disaggregating Census Data for Population Mapping Using Random Forests with Remotely-Sensed and Other Ancillary Data.” 
+Plos One, February. <a href="https://doi.org/10.1371/journal.pone.0107042">https://doi.org/10.1371/journal.pone.0107042</a>
+
 <h2>SEE ALSO</h2>
 	
 <em>
@@ -132,7 +59,7 @@ Densite_population vector=admon_units Land_cover=Land_cover
 	
 <h2>AUTHOR</h2>
 	
-	Safa FENNIA
+	Safa FENNIA, Tais GRIPPA
 </body>
 </html>
 
