@@ -585,7 +585,11 @@ def main():
     if(n_jobs > multiprocessing.cpu_count()):
         gscript.fatal(_("Invalid n_jobs <%s>") % n_jobs)
 
-    ##TODO: Add check if 'i.segment.stats' addon is well installed
+    # Check if i.segment.stats is well installed
+    if not gscript.find_program('i.segment.stats', '--help'):
+        message = _("You first need to install the addon i.segment.stats.\n")
+        message += _(" You can install the addon with 'g.extension i.segment.stats'")
+        gscript.fatal(message)
 
     ## Create temporary directory(-ies) for output
     create_tempdirs()
