@@ -481,7 +481,7 @@ def RandomForest(vector,id):
     TMP_MAPS.append("weight_float")
 
     ## Erase the temporary 'reclass_rule.csv' file
-    #os.remove(outputcsv)
+    os.remove(outputcsv)
 
     ## Force weight to zero if no built-up pixel in the grid
     if built_up =='':
@@ -613,8 +613,6 @@ def main():
 
     ## Compute area of administrative zones (raster)
     area_gridded_admin()
-
-##TODO: Add check if lc_list and raster_list prodided by user well exists in the corresponding rasters
 
     # Data preparation : extract list of classes from the Land Cover
     if (lc_list == ""):
