@@ -106,7 +106,9 @@
 #% description: Number of cores to be used for the parallel process
 #% required : yes
 #%end
-
+#%rules
+#% requires: raster_list, raster
+#%end
 
 
 
