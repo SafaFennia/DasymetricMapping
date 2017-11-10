@@ -17,6 +17,8 @@
 
 <p> As the model is trained to predict the napierian logarithm of the response variable, it is mandatory to not have zero or negative values in the column containing the response variable. It is also expected that the response variable column does not contain <em>NULL</em> values. For the same reason, the model is unable to predict a zero weight value. The implementation of the add-on is designed so that if a predicted weight is smaller than 0.0000000001 obs./m² the value in the weighting layer will be set to 0. It is possible to force weighting layer's grids with a value of zero if a specific class (specified via the <b>built_up_category</b> parameter) is absent in those grids.
 
+<h2>DEPENDENCIES</h2>
+<p> TODO: Add list of Python libraries dependencies and instruction about how to install them in the GRASS GIS's Python
   
 <h2>EXAMPLE</h2>
 
