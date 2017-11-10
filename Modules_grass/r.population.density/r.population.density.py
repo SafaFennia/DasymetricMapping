@@ -185,6 +185,11 @@ def Data_prep(categorical_raster):
     L.sort(key=float) #Sort the raster categories in ascending.
     return nsres, ewres, L
 
+def category_list_check(cat_list, raster_map):
+    existing_cat=Data_prep(raster_map.split("@")[0])[2]
+    for cat in cat_list:
+        if cat not in existing_cat:
+            gscript.fatal(_("Some categories provided via a list does not exists in <%s> raster. Please check.") % raster_map)
 
 def admin_boundaries(vector, id):
     '''
@@ -195,7 +200,7 @@ def admin_boundaries(vector, id):
     gscript.run_command('v.to.rast', quiet=True, input=vector, type='area', output='gridded_admin_units', use='attr', attribute_column=id, overwrite=True)
     gscript.run_command('r.to.vect', quiet=True, input='gridded_admin_units', output=vector.split("@")[0]+'_'+str(tile_size)+'m_gridded', type='area', column=id, flags='v',overwrite=True)
     gscript.run_command('v.db.join', map_=vector.split("@")[0]+'_'+str(tile_size)+'m_gridded', column='cat', other_table=vector, other_column=id, subset_columns=population) #join the population count
-    print "Create raster of administrative units with spatial resolution of "+str(tile_size)+" meters"
+    print "Create raster of administrative uniLand_coverts with spatial resolution of "+str(tile_size)+" meters"
     TMP_MAPS.append("gridded_admin_units")
 
 
@@ -580,6 +585,12 @@ def main():
         result = gscript.find_file(distance_to, element='cell')
         if (len(result['name']) == 0):
             gscript.fatal(_("Input distance_to <%s> not found") % distance_to)
+
+    # lc_list categories exists ?
+    if (lc_list != ""):
+        category_list_check(lc_list, Land_cover)
+    if (morpho_list != "" ):
+        category_list_check(morpho_list, morpho_zones)
 
     # valid n_jobs?
     if(n_jobs > multiprocessing.cpu_count()):
