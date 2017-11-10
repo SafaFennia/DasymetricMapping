@@ -377,7 +377,7 @@ def join_csv(indir,outfile,pattern_A,pattern_B="",pattern_C=""):
 def RandomForest(vector,id):
     '''
     Function that creates a random forest model trained at the administrative units level to generate gridded prediction
-    covariates are proportion of each Land Cover's class (opt: with proportion of each morpho zone)
+    covariates are proportion of each Land Cover's class (opt: with proportion of each land use's class)
     '''
 
     # -------------------------------------------------------------------------
@@ -422,9 +422,9 @@ def RandomForest(vector,id):
     list_covar=[]
     for lc in lc_classes_list:
         list_covar.append("class_"+lc+"_sum")
-    if (morpho_zones != ''):
-        for morpho in morpho_classes_list:
-            list_covar.append("class_"+morpho+"morpho_sum")
+    if (Land_use != ''):
+        for cl in lu_classes_list:
+            list_covar.append("class_"+cl+"morpho_sum")
     if(distance_to != ''):
         list_covar.append(distance_to+"_mean")
     first_covar = list_covar[0]   #Save the name of the first covariate to be used
@@ -518,13 +518,13 @@ def RandomForest(vector,id):
 
 
 def main():
-    global TMP_MAPS, vector, Land_cover, morpho_zones, distance_to, tile_size, id, population, built_up, output, plot, nsres, ewres, lc_classes_list, morpho_classes_list
+    global TMP_MAPS, vector, Land_cover, Land_use, distance_to, tile_size, id, population, built_up, output, plot, nsres, ewres, lc_classes_list, lu_classes_list
     TMP_MAPS = []
 
     # user's values
     vector = options['vector']
     Land_cover = options['land_cover']
-    morpho_zones = options['raster'] if options['raster'] else ""    #TODO: Change the name of 'morpho_zones' in 'Land_use'
+    Land_use = options['raster'] if options['raster'] else ""    #TODO: Change the name of 'morpho_zones' in 'Land_use'
     distance_to = options['distance_to'] if options['distance_to'] else ""
     tile_size = options['tile_size']
     id = options['id']
@@ -533,7 +533,7 @@ def main():
     output = options['output']
     plot = options['plot']
     lc_list = options['lc_list'].split(",") if options['lc_list'] else ""
-    morpho_list = options['raster_list'].split(",") if options['raster_list'] else ""  #TODO: Change the name of 'morpho_list' in 'lu_list'
+    lu_list = options['raster_list'].split(",") if options['raster_list'] else ""  #TODO: Change the name of 'morpho_list' in 'lu_list'
     distance_to = options['distance_to'] if options['distance_to'] else ""
     n_jobs = int(options['n_jobs'])
 
@@ -574,11 +574,11 @@ def main():
     if (int(tile_size) <= gscript.raster_info(Land_cover).nsres):
         gscript.fatal(_("Invalid Tile size, it must be greater than Land Cover's resolution "))
 
-    # morpho_zones exists?
-    if (morpho_zones !=''):
-        result = gscript.find_file(morpho_zones, element='cell')
+    # Land_use exists?
+    if (Land_use !=''):
+        result = gscript.find_file(Land_use, element='cell')
         if (len(result['name']) == 0):
-            gscript.fatal(_("Input morpho zones <%s> not found") % morpho_zones)
+            gscript.fatal(_("Input raster <%s> not found") % Land_use)
 
     # distance_to exists?
     if (distance_to !=''):
@@ -589,8 +589,8 @@ def main():
     # lc_list categories exists ?
     if (lc_list != ""):
         category_list_check(lc_list, Land_cover)
-    if (morpho_list != "" ):
-        category_list_check(morpho_list, morpho_zones)
+    if (lu_list != "" ):
+        category_list_check(lu_list, Land_use)
 
     # valid n_jobs?
     if(n_jobs > multiprocessing.cpu_count()):
@@ -623,29 +623,29 @@ def main():
     print "Classes of raster '"+str(Land_cover.split("@")[0])+"' to be used: "+",".join(lc_classes_list)
 
     # Data preparation : extract list of classes from the land use
-    if(morpho_zones != '' ):
-        if (morpho_list == ""):
-            morpho_classes_list = Data_prep(morpho_zones.split("@")[0])[2]  #Get a sorted list with values of category in this raster
+    if(Land_use != '' ):
+        if (lu_list == ""):
+            lu_classes_list = Data_prep(Land_use.split("@")[0])[2]  #Get a sorted list with values of category in this raster
         else:
-            morpho_classes_list = morpho_list
-            morpho_classes_list.sort(key=float)  #Make sur the list provided by the user is well sorted.
-        print "Classes of raster '"+str(morpho_zones.split("@")[0])+"' to be used: "+",".join(morpho_classes_list)
+            lu_classes_list = lu_list
+            lu_classes_list.sort(key=float)  #Make sur the list provided by the user is well sorted.
+        print "Classes of raster '"+str(Land_use.split("@")[0])+"' to be used: "+",".join(lu_classes_list)
 
     ## Create binary raster for each class.
     #for landcover
     gscript.run_command('g.region', raster=Land_cover.split("@")[0])  #Set the region to match the extend of the raster
     binary_lc = Parallel(n_jobs=n_jobs,backend="threading")(delayed(create_binary_raster, check_pickle=False)(Land_cover.split("@")[0], cl ,"",) for cl in lc_classes_list)
     #for landuse
-    if(morpho_zones != '' ):
-        gscript.run_command('g.region', raster=morpho_zones.split("@")[0])  #Set the region to match the extend of the raster
-        binary_morpho = Parallel(n_jobs=n_jobs,backend="threading")(delayed(create_binary_raster, check_pickle=False)(morpho_zones.split("@")[0], cl ,"morpho",) for cl in morpho_classes_list)
+    if(Land_use != '' ):
+        gscript.run_command('g.region', raster=Land_use.split("@")[0])  #Set the region to match the extend of the raster
+        binary_lu = Parallel(n_jobs=n_jobs,backend="threading")(delayed(create_binary_raster, check_pickle=False)(Land_use.split("@")[0], cl ,"morpho",) for cl in lu_classes_list)
 
     ## calculating classes' proportions within each grid and administrative unit
     grid_lc = Parallel(n_jobs=n_jobs,backend="threading")(delayed(proportion_class_grid, check_pickle=False)(cl ,"",) for cl in lc_classes_list)
     admin_lc = Parallel(n_jobs=n_jobs,backend="threading")(delayed(proportion_class_admin, check_pickle=False)(cl ,"",) for cl in lc_classes_list)
-    if(morpho_zones != '' ):
-            grid_morpho = Parallel(n_jobs=n_jobs,backend="threading")(delayed(proportion_class_grid, check_pickle=False)(cl, "morpho",) for cl in morpho_classes_list)
-            admin_morpho = Parallel(n_jobs=n_jobs,backend="threading")(delayed(proportion_class_admin, check_pickle=False)(cl, "morpho",) for cl in morpho_classes_list)
+    if(Land_use != '' ):
+            grid_lu = Parallel(n_jobs=n_jobs,backend="threading")(delayed(proportion_class_grid, check_pickle=False)(cl, "morpho",) for cl in lu_classes_list)
+            admin_lu = Parallel(n_jobs=n_jobs,backend="threading")(delayed(proportion_class_admin, check_pickle=False)(cl, "morpho",) for cl in lu_classes_list)
 
     ## adding distance to places of interest data to the attribute table of the gridded vector and calculate its mean for each administrative unit
     if(distance_to !=''):
@@ -662,7 +662,7 @@ def main():
         pattern_A="prop_lc*.csv"   #Add all proportions from Land cover or Land use raster
         pattern_B=""
         pattern_C=""
-        if(morpho_zones != '' ):
+        if(Land_use != '' ):
             pattern_B="prop_morpho*.csv"
         if distance_to !='':
             pattern_C="mean_*.csv"     #Add mean distance to amenity if the option was used
