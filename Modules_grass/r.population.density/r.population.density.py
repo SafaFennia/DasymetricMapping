@@ -200,7 +200,7 @@ def admin_boundaries(vector, id):
     gscript.run_command('v.to.rast', quiet=True, input=vector, type='area', output='gridded_admin_units', use='attr', attribute_column=id, overwrite=True)
     gscript.run_command('r.to.vect', quiet=True, input='gridded_admin_units', output=vector.split("@")[0]+'_'+str(tile_size)+'m_gridded', type='area', column=id, flags='v',overwrite=True)
     gscript.run_command('v.db.join', map_=vector.split("@")[0]+'_'+str(tile_size)+'m_gridded', column='cat', other_table=vector, other_column=id, subset_columns=population) #join the population count
-    print "Create raster of administrative uniLand_coverts with spatial resolution of "+str(tile_size)+" meters"
+    print "Create raster of administrative units with spatial resolution of "+str(tile_size)+" meters"
     TMP_MAPS.append("gridded_admin_units")
 
 
