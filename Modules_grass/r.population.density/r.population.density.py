@@ -152,8 +152,6 @@ try:
 except:
     gscript.fatal("Scikit learn 0.18 or newer is not installed")
 
-##TODO: Add check for presence of negative of null values in the population column of the administrative unit vector layer. If presence, a error message should appeared because ma.log() would crash anyway
-
 def cleanup():
     gscript.run_command('g.remove', quiet=True, type='raster', name=','.join(TMP_MAPS), flags='fb')   ##TODO Add removing of temporary csv files
 
@@ -555,10 +553,15 @@ def main():
     if population not in gscript.vector_columns(vector).keys():
         gscript.fatal(_("<%s> column does not exist for vector %s") % (population, vector))
 
-    # is  population column numeric?
+    # is population column numeric?
     coltype = gscript.vector_columns(vector)[population]['type']
     if coltype not in ('INTEGER', 'DOUBLE PRECISION'):
         gscript.fatal(_("<%s> column must be numeric")% (population))
+
+    # does population column contain values <=0 of NULL ?
+    for x in gscript.parse_command('v.db.select', map=vector, columns=population, null_value='0', flags='c'):
+        if float(x) <= 0:
+            gscript.fatal(_("Response values contained in <%s> column can not be smaller than 1 or have NULL values. Check manual page for more informations")% (population))
 
     # is tile_size diffrent from null?
     if (int(tile_size) <= gscript.raster_info(Land_cover).nsres):
