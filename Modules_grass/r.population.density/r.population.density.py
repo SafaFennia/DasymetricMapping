@@ -38,7 +38,7 @@
 #% required : yes
 #%end
 #%option G_OPT_R_INPUT
-#% key: raster
+#% key: land_use
 #% type: string
 #% description: Input raster: Land use, morphological areas...
 #% required : no
@@ -82,22 +82,32 @@
 #%end
 #%option G_OPT_F_OUTPUT
 #% key: plot
-#% description: Name for output plot
+#% description: Name for output plot of model's feature importances
 #% required: yes
 #% guisection: Output
 #%end
 #%option
 #% key: lc_list
 #% type: string
-#% label: Land Cover's categories to be used
+#% label: Land cover's categories to be used
 #% description: Format: 1 2 3 thru 7 *
 #% required: no
 #%end
 #%option
-#% key: raster_list
+#% key: lu_list
 #% type: string
-#% label: List of additional raster categories to be used
+#% label: Land use's categories to be used
 #% description: Format: 1 2 3 thru 7 *
+#% required: no
+#%end
+#%option G_OPT_F_INPUT
+#% key: lc_class_name
+#% description: Csv file containing class names for land cover map
+#% required: no
+#%end
+#%option G_OPT_F_INPUT
+#% key: lu_class_name
+#% description: Csv file containing class names for land use map
 #% required: no
 #%end
 #%option
@@ -107,7 +117,8 @@
 #% required : yes
 #%end
 #%rules
-#% requires: raster_list, raster
+#% requires: lu_list, land_use
+#% requires: lu_class_name, land_use
 #%end
 
 
@@ -155,8 +166,7 @@ except:
     gscript.fatal("Scikit learn 0.18 or newer is not installed")
 
 def cleanup(): ##TODO Add removing of temporary csv files
-    print 'non cleanup'
-    #gscript.run_command('g.remove', quiet=True, type='raster', name=','.join(TMP_MAPS), flags='fb')
+    gscript.run_command('g.remove', quiet=True, type='raster', name=','.join(TMP_MAPS), flags='fb')
 
 
 def create_tempdirs():
@@ -365,6 +375,36 @@ def join_csv(indir,outfile,pattern_A,pattern_B="",pattern_C=""):
     if warning_event>=1: #If at least one warning event happend
         sys.exit("Unexpected results seem present in the temporay .csv file. Please check")
 
+def labels_from_csv(current_labels):
+    new_label=[]
+    lc_class_rename_dict={}
+    lu_class_rename_dict={}
+    if lc_class_name != "":
+        for row in open(lc_class_name):
+            classcode,classname=row.replace('\r\n','\n').split('\n')[0].split('|')
+            lc_class_rename_dict[classcode]=classname
+    if lu_class_name != "":
+        for row in open(lu_class_name):
+            classcode,classname=row.replace('\r\n','\n').split('\n')[0].split('|')
+            lu_class_rename_dict[classcode]=classname
+    for l in current_labels:
+        if l[:2]=='LC':
+            classnum=l[3:l.index('_proportion')]
+            if classnum in lc_class_rename_dict.keys():
+                new_label.append('LC "'+lc_class_rename_dict[classnum]+'"')
+            else:
+                new_label.append('LC "'+classnum+'"')
+        elif l[:2]=='LU':
+                        classnum=l[3:l.index('_proportion')]
+                        if classnum in lu_class_rename_dict.keys():
+                            new_label.append('LU "'+lu_class_rename_dict[classnum]+'"')
+                        else:
+                            new_label.append('LU "'+classnum+'"')
+        elif l[-4:]=='mean':
+            new_label.append(l[0].title()+l[1:-5].replace('_',' '))
+        else:
+            new_label.append(l)
+    return new_label
 
 def RandomForest(vector,id):
     '''
@@ -410,7 +450,7 @@ def RandomForest(vector,id):
     for i in features:
         df_admin[i].fillna(0, inplace=True)
 
-    ## Make a list with name of covariables columns        ##TODO: Again, it could be great to have more explicit co-variables names in the output plot with feature importances
+    ## Make a list with name of covariables columns
     list_covar=[]
     for cl in lc_classes_list:
         list_covar.append("LC_"+cl+"_proportion")
@@ -496,6 +536,7 @@ def RandomForest(vector,id):
     Labels = []
     for i in range(x.shape[1]):
         Labels.append(x_grid.columns[idx[i]])
+    Labels=labels_from_csv(Labels)
     plt.yticks(y_axis, Labels)
     plt.ylim([-1,len(y_axis)])
     plt.xlim([-0.04,max(x_axis)+0.04])
@@ -508,13 +549,13 @@ def RandomForest(vector,id):
 
 
 def main():
-    global TMP_MAPS, vector, Land_cover, Land_use, distance_to, tile_size, id, population, built_up, output, plot, nsres, ewres, lc_classes_list, lu_classes_list
+    global TMP_MAPS, vector, Land_cover, Land_use, distance_to, tile_size, id, population, built_up, output, plot, nsres, ewres, lc_classes_list, lu_classes_list, lc_class_name, lu_class_name
     TMP_MAPS = []
 
     # user's values
     vector = options['vector']
     Land_cover = options['land_cover']
-    Land_use = options['raster'] if options['raster'] else ""    #TODO: Change the name of 'morpho_zones' in 'Land_use'
+    Land_use = options['land_use'] if options['land_use'] else ""
     distance_to = options['distance_to'] if options['distance_to'] else ""
     tile_size = options['tile_size']
     id = options['id']
@@ -523,7 +564,9 @@ def main():
     output = options['output']
     plot = options['plot']
     lc_list = options['lc_list'].split(",") if options['lc_list'] else ""
-    lu_list = options['raster_list'].split(",") if options['raster_list'] else ""  #TODO: Change the name of 'morpho_list' in 'lu_list'
+    lu_list = options['lu_list'].split(",") if options['lu_list'] else ""
+    lc_class_name = options['lc_class_name'] if options['lc_class_name'] else ""
+    lu_class_name = options['lu_class_name'] if options['lu_class_name'] else ""
     distance_to = options['distance_to'] if options['distance_to'] else ""
     n_jobs = int(options['n_jobs'])
 
@@ -576,11 +619,19 @@ def main():
         if (len(result['name']) == 0):
             gscript.fatal(_("Input distance_to <%s> not found") % distance_to)
 
-    # lc_list categories exists ?
+    # list of categories exists in the corresponding raster ?
     if (lc_list != ""):
         category_list_check(lc_list, Land_cover)
     if (lu_list != "" ):
         category_list_check(lu_list, Land_use)
+
+    # file with class name exists ?
+    if lc_class_name != "":
+        if os.path.isfile(lc_class_name) is False :
+            gscript.fatal(_("Csv file containing class names for <%s> doesn't exists") % Land_cover)
+    if lu_class_name != "":
+        if os.path.isfile(lu_class_name) is False :
+            gscript.fatal(_("Csv file containing class names for <%s> doesn't exists") % Land_use)
 
     # valid n_jobs?
     if(n_jobs > multiprocessing.cpu_count()):
