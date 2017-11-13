@@ -173,11 +173,14 @@ except:
 
 def cleanup():
     gscript.run_command('g.remove', quiet=True, type='raster', name=','.join(TMP_MAPS), flags='fb')
-    #for tmp_csv in TMP_CSV:
-        #if os.path.isfile(tmp_csv):
-            #os.remove(tmp_csv)
+    for tmp_csv in TMP_CSV:
+        if os.path.isfile(tmp_csv):
+            os.remove(tmp_csv)
 
 def create_tempdirs():
+    '''
+    Function that create needed temporary folder. Those name have to be saved as other function will depend of the name of those folder.
+    '''
     # Temporary directory for administrative units statistics
     global outputdirectory_admin
     outputdirectory_admin=os.path.join(tempfile.gettempdir(),"admin_level")
@@ -261,6 +264,10 @@ def proportion_class(outputdirectory, rasterLayer, cl):
 
 
 def create_clumped_grid(tile_size):
+    '''
+    Function creating clumped grid which will be used for computing raster's classes proportion at grid level. This clumped grid will
+    also be used at the end with r.reclass to allow random forest prediction to each grid
+    '''
     gscript.run_command('g.region', raster=Land_cover.split("@")[0], res=tile_size)
     gscript.run_command('r.mask', raster=Land_cover.split("@")[0])
     gscript.mapcalc("empty_grid=rand(0 ,999999999)", overwrite=True, seed='auto') #Creating a raster with random values
@@ -271,6 +278,9 @@ def create_clumped_grid(tile_size):
 
 
 def create_binary_raster(rasterLayer, cl):
+    '''
+    Function creating a binary raster for class 'cl' in raster 'rasterLayer'
+    '''
     #Create a binary raster for the current class
     prefix='LC' if rasterLayer==Land_cover.split("@")[0] else 'LU'
     binary_class = prefix+"_"+cl
@@ -280,6 +290,10 @@ def create_binary_raster(rasterLayer, cl):
 
 
 def compute_proportion_csv(infile):
+    '''
+    Function used in 'proportion_class' function. It take as input the csv from i.segment.stats with
+    the sum of pixels and create a new csv with the proportion
+    '''
     fin = open(infile) #Open the infile .csv
     # Set the path to the outputfile and open it
     head, tail = os.path.split(infile)
@@ -318,7 +332,10 @@ def compute_proportion_csv(infile):
             fout.write("\n")  #Write a return on a new line if not at the last row
 
 
-def atoi(text):   #Return integer if text is digit - Used in 'natural_keys' function
+def atoi(text):
+    '''
+    Function that return integer if text is digit - Used in 'natural_keys' function
+    '''
     return int(text) if text.isdigit() else text
 
 
@@ -336,6 +353,11 @@ def natural_keys(text):   #Return key to be used for sorting string containing n
 
 
 def join_csv(indir,outfile,pattern_A,pattern_B="",pattern_C=""):
+    '''
+    Function that will join several csv files contained in a directory in a new csv. The patterns allow to use only some of the
+    csv in the directory and to keep them sorted in the joined csv. Warning: It is not a true join in the sens that there is no
+    check of concordance of primary keys betweens input file. I.segment.stat provide output with the same rank so it is not needed.
+    '''
     # Make a list of .csv files according to their filename pattern
     os.chdir(indir) # Change the current directory to the folder containing all the .csv files
     csvList=glob.glob(pattern_A) #Make a list of strings with the name of .csv files
@@ -384,6 +406,10 @@ def join_csv(indir,outfile,pattern_A,pattern_B="",pattern_C=""):
         gscript.fatal("Unexpected results seem present in temporary .csv files. Please check")
 
 def labels_from_csv(current_labels):
+    '''
+    Function that take as input a list of current labels for 'LC' and 'LU' classes and return a list of modified
+    labels according to the classes' names provided via "lc_class_name" and "lu_class_name"
+    '''
     new_label=[]
     lc_class_rename_dict={}
     lu_class_rename_dict={}
@@ -499,13 +525,13 @@ def RandomForest(vector,id):
     for i, cat in enumerate(cat_list):
         rule+=str(cat)
         rule+="="
-        rule+=str(int(round(weight_list[i]*1000000000,0)))
+        rule+=str(int(round(weight_list[i]*1000000000,0)))  #reclass rule of r.reclass requier INTEGER but random forest prediction could be very low values.
         rule+="\n"
     rule+="*"
     rule+="="
     rule+="NULL"
 
-    ## Create a temporary 'weight_reclass_rules.csv' file
+    ## Create a temporary 'weight_reclass_rules.csv' file for r.reclass
     outputcsv=os.path.join(outputdirectory_grid,"weight_reclass_rules.csv")
     TMP_CSV.append(outputcsv)
     f = open(outputcsv, 'w')
@@ -515,7 +541,7 @@ def RandomForest(vector,id):
     ## Reclass segments raster layer to keep only training segments, using the reclas_rule.csv file
     gscript.run_command('g.region', raster='clumped_grid')
     gscript.run_command('r.reclass', quiet=True, overwrite=True, input="clumped_grid", output="weight_int", rules=outputcsv)
-    gscript.run_command('r.mapcalc', expression="weight_float=float(weight_int)/float(1000000000)", quiet=True, overwrite=True) #Get back to prediction of population density in squared meters
+    gscript.run_command('r.mapcalc', expression="weight_float=float(weight_int)/float(1000000000)", quiet=True, overwrite=True) #Get back to the original 'float' prediction of population density of random forest
     TMP_MAPS.append("weight_int")
     TMP_MAPS.append("weight_float")
 
@@ -532,20 +558,20 @@ def RandomForest(vector,id):
     # Feature importances
     # -------------------------------------------------------------------------
 
-    importances = regressor.feature_importances_
+    importances = regressor.feature_importances_  #Save feature importances from the model
     indices = np.argsort(importances)[::-1]
     x_axis = importances[indices][::-1]
     idx = indices[::-1]
     y_axis = range(x.shape[1])
-    plt.figure(figsize=(5, (len(y_axis)+1)*0.23))
+    plt.figure(figsize=(5, (len(y_axis)+1)*0.23))  #Set the size of the plot according to the number of features
     plt.scatter(x_axis,y_axis)
     Labels = []
     for i in range(x.shape[1]):
         Labels.append(x_grid.columns[idx[i]])
-    Labels=labels_from_csv(Labels)
+    Labels=labels_from_csv(Labels)  #Change the labels of the feature according to 'lc_classes_list' and 'lu_classes_list'
     plt.yticks(y_axis, Labels)
-    plt.ylim([-1,len(y_axis)])
-    plt.xlim([-0.04,max(x_axis)+0.04])
+    plt.ylim([-1,len(y_axis)])  #Ajust ylim
+    plt.xlim([-0.04,max(x_axis)+0.04]) #Ajust xlim
     plt.title("Feature importances")
     if not os.path.exists(os.path.split(plot)[0]):  #Create folder where to save the plot if not exists
         os.makedirs(os.path.split(plot)[0])
