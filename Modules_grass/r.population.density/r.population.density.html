@@ -8,7 +8,19 @@
 
 <p> It is possible not to use all the classes whether for the land cover map or for the optional raster. For that purpose, a list of classes to be used should be specified via the <b>lc_list</b> parameter (for land cover map) or the <b>raster_list</b> parameter (for an additional map).
 
-<p> The <em><a href="https://en.wikipedia.org/wiki/Out-of-bag_error">out-of-bag error</a></em> of the model is printed in the console and give an indication about the internal accuracy of the model (cross-validation on training set at the administrative units level). Feature importances in the model are ploted in a graph, whose name have to be specified via the <b>plot</b> parameter.
+<p> The <em><a href="https://en.wikipedia.org/wiki/Out-of-bag_error">out-of-bag error</a></em> of the model is printed in the console and give an indication about the internal accuracy of the model (cross-validation on training set at the administrative units level). 
+
+<p> Feature importances in the model are ploted in a graph, whose name have to be specified via the <b>plot</b> parameter. In option, a table with correspondances between rasters categories and classes name could be provided in a .csv file using <b>lc_class_name</b> and the <b>lu_class_name</b> parameters. The file cannot have any special character and have to be formatted as follows:
+<div class="code"><pre>
+1|Continuous urban fabric
+2|Discontinuous urban fabric
+3|Industrial or commercial units
+4|Road and rail networks and associated land
+5|Port areas
+6|Airports
+7|Mineral extraction sites
+8|Dump sites
+</pre></div>
 
 <p> The add-on support parallel processing. The number of cores to be used should be specified via the <b>n_jobs</b> parameter. 
 
@@ -19,9 +31,9 @@
 
 <h2>DEPENDENCIES</h2>
 <em>r.population.density</em> requires the <a href="https://grass.osgeo.org/grass72/manuals/addons/i.segment.stats.html">i.segment.stats addon</a> and 
-<a href="https://grass.osgeo.org/grass72/manuals/addons/r.object.geometry.html">r.object.geometry addon</a> to be installed. This can be done through <a href="https://grass.osgeo.org/grass72/manuals/g.extension.html">g.extension</a>. 
+<a href="https://grass.osgeo.org/grass72/manuals/addons/r.object.geometry.html">r.object.geometry addon</a> to be installed. This can be done using <a href="https://grass.osgeo.org/grass72/manuals/g.extension.html">g.extension</a>. 
 <p> 
-<em>r.population.density</em> uses the "scikit-learn" machine learning package along with the "pandas" and "joblib" python package. These packages need to be installed within your GRASS GIS Python environment for <em>r.population.density</em> to work. For Linux users, this package should be available through the linux package manager in most distributions (named for example "python-scikit-learn"). For MS-Windows users using a 64 bit GRASS, the easiest way is to use the <a href="https://grass.osgeo.org/download/software/ms-windows/">OSGeo4W</a> installation method of GRASS, where the python setuptools can also be installed. You can then use 'easy_install pip' to install the pip package manager. Then, you can download the "Python wheels" corresponding to each package and install them using 'pip install packagename.whl'. Bellow, link for downloading wheels are provided. If GRASS was not installed using the OSGeo4W method, the pip package manager can be installed by saving the "get-pip.py" pyhton script provided <a href="https://bootstrap.pypa.io/get-pip.py">here</a> in the folder containing the GRASS GIS Python environment (GRASSFOLDER/../etc/python/grass) and executing it with administrator rights with the followin command <em>Python get-pip.py</em> 
+<em>r.population.density</em> uses the "scikit-learn" machine learning package along with the "pandas" and "joblib" python package. These packages need to be installed within your GRASS GIS Python environment for <em>r.population.density</em> to work. For Linux users, this package should be available through the linux package manager in most distributions (named for example "python-scikit-learn"). For MS-Windows users using a 64 bit GRASS, the easiest way is to use the <a href="https://grass.osgeo.org/download/software/ms-windows/">OSGeo4W</a> installation method of GRASS, where the python setuptools can also be installed. You can then use 'easy_install pip' to install the pip package manager. Then, you can download the "Python wheels" corresponding to each package and install them using the following command : <em>pip install packagename.whl</em>. Bellow, links for downloading wheels are provided. If GRASS was not installed using the OSGeo4W method, the pip package manager can be installed by saving the "get-pip.py" pyhton script provided <a href="https://bootstrap.pypa.io/get-pip.py">here</a> in the folder containing the GRASS GIS Python environment (GRASSFOLDER/../etc/python/grass) and executing it with administrator rights with the followin command : <em>Python get-pip.py</em> 
 
 <p>Pandas Wheel : <a href="https://pypi.python.org/pypi/pandas">https://pypi.python.org/pypi/pandas</a>
 <p>Scikit-learn Wheel : <a href="https://pypi.python.org/pypi/scikit-learn/0.18.2">https://pypi.python.org/pypi/scikit-learn/0.18.2</a>
