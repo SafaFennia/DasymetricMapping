@@ -165,9 +165,10 @@ try:
 except:
     gscript.fatal("Scikit learn 0.18 or newer is not installed")
 
-def cleanup(): ##TODO Add removing of temporary csv files
+def cleanup():
     gscript.run_command('g.remove', quiet=True, type='raster', name=','.join(TMP_MAPS), flags='fb')
-
+    for tmp_csv in TMP_CSV:
+        os.remove(tmp_csv)
 
 def create_tempdirs():
     # Temporary directory for administrative units statistics
@@ -226,6 +227,7 @@ def area_gridded_admin():
     admin_area_output=os.path.join(outputdirectory_admin,"area.csv")
     gscript.run_command('i.segment.stats', flags="r", quiet=True, overwrite=True, map='gridded_admin_units', area_measures='area', csvfile=admin_area_output, separator='comma')
     print "Computing area of (gridded) administrative units"
+    TMP_CSV.append(admin_area_output)
 
     # Create a list with area of each administrative zones
     global area_list
@@ -243,13 +245,14 @@ def proportion_class(outputdirectory, rasterLayer, cl):
     '''
     #Compute sum of pixels of the current class
     prefix='LC' if rasterLayer==Land_cover else 'LU'
-    admin_stat_csv=os.path.join(outputdirectory,prefix+"_"+cl+".csv")
+    stat_csv=os.path.join(outputdirectory,prefix+"_"+cl+".csv")
+    TMP_CSV.append(stat_csv)
     ref_map='gridded_admin_units' if outputdirectory==outputdirectory_admin else 'clumped_grid'
-    gscript.run_command('i.segment.stats', quiet=True, overwrite=True, map=ref_map, area_measures="", rasters=prefix+"_"+cl, raster_statistics='sum', csvfile=admin_stat_csv, separator='comma')
+    gscript.run_command('i.segment.stats', quiet=True, overwrite=True, map=ref_map, area_measures="", rasters=prefix+"_"+cl, raster_statistics='sum', csvfile=stat_csv, separator='comma')
     #Compute the proportion
     global nsres, ewres
     nsres, ewres = Data_prep(prefix+"_"+cl)[0:2] #Get the north-south and east-west resolution of the current raster
-    compute_proportion_csv(admin_stat_csv) #Create a new csv containing the proportion
+    compute_proportion_csv(stat_csv) #Create a new csv containing the proportion
 
 
 def create_clumped_grid(tile_size):
@@ -278,6 +281,7 @@ def compute_proportion_csv(infile):
     head, tail = os.path.split(infile)
     root, ext = os.path.splitext(tail)
     outfile=os.path.join(head,root+"_prop"+ext)
+    TMP_CSV.append(outfile)
     fout = open(outfile, 'w') #Create and open a new .csv to be written
 
     # Count number of row in the csv file
@@ -373,7 +377,7 @@ def join_csv(indir,outfile,pattern_A,pattern_B="",pattern_C=""):
     fout.close() #Close the outptufile
 
     if warning_event>=1: #If at least one warning event happend
-        sys.exit("Unexpected results seem present in the temporay .csv file. Please check")
+        gscript.fatal("Unexpected results seem present in temporary .csv files. Please check")
 
 def labels_from_csv(current_labels):
     new_label=[]
@@ -499,6 +503,7 @@ def RandomForest(vector,id):
 
     ## Create a temporary 'weight_reclass_rules.csv' file
     outputcsv=os.path.join(outputdirectory_grid,"weight_reclass_rules.csv")
+    TMP_CSV.append(outputcsv)
     f = open(outputcsv, 'w')
     f.write(rule)
     f.close()
@@ -509,9 +514,6 @@ def RandomForest(vector,id):
     gscript.run_command('r.mapcalc', expression="weight_float=float(weight_int)/float(1000000000)", quiet=True, overwrite=True) #Get back to prediction of population density in squared meters
     TMP_MAPS.append("weight_int")
     TMP_MAPS.append("weight_float")
-
-    ## Erase the temporary 'reclass_rule.csv' file
-    os.remove(outputcsv)
 
     ## Force weight to zero if no built-up pixel in the grid
     if built_up =='':
@@ -549,8 +551,9 @@ def RandomForest(vector,id):
 
 
 def main():
-    global TMP_MAPS, vector, Land_cover, Land_use, distance_to, tile_size, id, population, built_up, output, plot, nsres, ewres, lc_classes_list, lu_classes_list, lc_class_name, lu_class_name
+    global TMP_MAPS, TMP_CSV, vector, Land_cover, Land_use, distance_to, tile_size, id, population, built_up, output, plot, nsres, ewres, lc_classes_list, lu_classes_list, lc_class_name, lu_class_name
     TMP_MAPS = []
+    TMP_CSV = []
 
     # user's values
     vector = options['vector']
@@ -692,9 +695,11 @@ def main():
     if(distance_to !=''):
         # For grids
         grid_stat_output=os.path.join(outputdirectory_grid,"mean_dist.csv")
+        TMP_CSV.append(grid_stat_output)
         gscript.run_command('i.segment.stats', quiet=True, overwrite=True, map='clumped_grid', area_measures="", rasters=distance_to, raster_statistics='mean', csvfile=grid_stat_output, separator='comma')
         # For administrative zones
         admin_stat_output=os.path.join(outputdirectory_admin,"mean_dist.csv")
+        TMP_CSV.append(admin_stat_output)
         gscript.run_command('i.segment.stats', quiet=True, overwrite=True, map='gridded_admin_units', area_measures="", rasters=distance_to, raster_statistics='mean', csvfile=admin_stat_output, separator='comma')
 
     ## Join .csv files of statistics
