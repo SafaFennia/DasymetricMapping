@@ -154,19 +154,20 @@ try:
 except:
     gscript.fatal("Scikit learn 0.18 or newer is not installed")
 
-def cleanup():
-    gscript.run_command('g.remove', quiet=True, type='raster', name=','.join(TMP_MAPS), flags='fb')   ##TODO Add removing of temporary csv files
+def cleanup(): ##TODO Add removing of temporary csv files
+    print 'non cleanup'
+    #gscript.run_command('g.remove', quiet=True, type='raster', name=','.join(TMP_MAPS), flags='fb')
 
 
 def create_tempdirs():
     # Temporary directory for administrative units statistics
     global outputdirectory_admin
-    outputdirectory_admin=os.path.join(tempfile.gettempdir(),"admin_stats")
+    outputdirectory_admin=os.path.join(tempfile.gettempdir(),"admin_level")
     if not os.path.exists(outputdirectory_admin):
         os.makedirs(outputdirectory_admin)
     # Temporary directory for grids statistics
     global outputdirectory_grid
-    outputdirectory_grid=os.path.join(tempfile.gettempdir(),"grid_stats")
+    outputdirectory_grid=os.path.join(tempfile.gettempdir(),"grid_level")
     if not os.path.exists(outputdirectory_grid):
         os.makedirs(outputdirectory_grid)
 
@@ -186,6 +187,9 @@ def Data_prep(categorical_raster):
     return nsres, ewres, L
 
 def category_list_check(cat_list, raster_map):
+    '''
+    Function checking if the category provided via a list well exists in the corresponding raster_map
+    '''
     existing_cat=Data_prep(raster_map.split("@")[0])[2]
     for cat in cat_list:
         if cat not in existing_cat:
@@ -223,19 +227,19 @@ def area_gridded_admin():
         area_list.append(row.split("\n")[0].split(",")[1]) #For each line, save the second column in the list named 'area_list'
 
 
-def proportion_class_admin(cl, opt=""):
+def proportion_class(outputdirectory, rasterLayer, cl):
     '''
-    Function calculating classes' proportions within each administrative unit
+    Function calculating classes' proportions for administrative units or for regular grid
     '''
-    #compute sum of pixels of the current class
-    if opt=="":
-        admin_stat_csv=os.path.join(outputdirectory_admin,"lc_sum_"+cl+".csv")
-    else:
-        admin_stat_csv=os.path.join(outputdirectory_admin,opt+"_sum_"+cl+".csv")
-    gscript.run_command('i.segment.stats', quiet=True, overwrite=True, map='gridded_admin_units', area_measures="", rasters="class_"+cl+opt, raster_statistics='sum', csvfile=admin_stat_csv, separator='comma')
-    #Transform the value in the .csv into a proportion
-    nsres, ewres = Data_prep("class_"+cl+opt)[0:2] #Get the north-south and east-west resolution of the current raster
-    compute_proportion_csv(admin_stat_csv, type_raster="admin") #Create a new csv containing the proportion
+    #Compute sum of pixels of the current class
+    prefix='LC' if rasterLayer==Land_cover else 'LU'
+    admin_stat_csv=os.path.join(outputdirectory,prefix+"_"+cl+".csv")
+    ref_map='gridded_admin_units' if outputdirectory==outputdirectory_admin else 'clumped_grid'
+    gscript.run_command('i.segment.stats', quiet=True, overwrite=True, map=ref_map, area_measures="", rasters=prefix+"_"+cl, raster_statistics='sum', csvfile=admin_stat_csv, separator='comma')
+    #Compute the proportion
+    global nsres, ewres
+    nsres, ewres = Data_prep(prefix+"_"+cl)[0:2] #Get the north-south and east-west resolution of the current raster
+    compute_proportion_csv(admin_stat_csv) #Create a new csv containing the proportion
 
 
 def create_clumped_grid(tile_size):
@@ -249,20 +253,21 @@ def create_clumped_grid(tile_size):
     print "Create a grid raster with spatial resolution of "+str(tile_size)+" meters"
 
 
-def create_binary_raster(rasterLayer, cl, opt=""):      ##TODO: Change the name accros the script to be more clear to which layer it correspond to
+def create_binary_raster(rasterLayer, cl):
     #Create a binary raster for the current class
-    binary_class = "class_"+cl+opt
+    prefix='LC' if rasterLayer==Land_cover else 'LU'
+    binary_class = prefix+"_"+cl
     gscript.run_command('r.mapcalc', expression=binary_class+'=if('+rasterLayer+'=='+str(cl)+',1,0)',overwrite=True)
     gscript.run_command('r.null', map=binary_class, null='0')
     TMP_MAPS.append(binary_class)
 
 
-def compute_proportion_csv(infile, type_raster="grid"):
+def compute_proportion_csv(infile):
     fin = open(infile) #Open the infile .csv
     # Set the path to the outputfile and open it
     head, tail = os.path.split(infile)
     root, ext = os.path.splitext(tail)
-    outfile=os.path.join(head,"prop_"+root+ext)
+    outfile=os.path.join(head,root+"_prop"+ext)
     fout = open(outfile, 'w') #Create and open a new .csv to be written
 
     # Count number of row in the csv file
@@ -275,37 +280,24 @@ def compute_proportion_csv(infile, type_raster="grid"):
     for rowid, row in enumerate(fin):
         currentrow=[] #Define an empty list which will be filled with values for the new line to be writen
         if rowid==0:
-            currentrow.append(row.split("\n")[0])
+            currentrow.append(row.split("\n")[0].split(',')[0])
+            col_name=row.split("\n")[0].split(',')[-1]
+            index=col_name.find("_sum")
+            if index != -1:
+                currentrow.append(col_name[:index]+'_proportion')
         else:
             for colid, col in enumerate(row.split(",")):
                 if colid==0:
                     currentrow.append(col)
                 else:
-                    if type_raster=="admin":  #If proportion computed for the administratives zones
+                    if os.path.split(head)[-1]=="admin_level":  #If proportion computed for the administratives zones
                         proportion_value=((float(col)*(ewres*nsres))/(float(area_list[rowid-1])*float(tile_size)**2))*100
-                    else:  #If proportion computed for the regular grids
+                    elif os.path.split(head)[-1]=="grid_level":  #If proportion computed for the regular grids
                         proportion_value=((float(col)*(ewres*nsres))/(float(tile_size)**2))*100
                     currentrow.append('{0:.8f}'.format(proportion_value))  #Round to 8 decimals and add the value in the current row
         fout.write(",".join(currentrow))  #Write the new row
         if rowid < nline-1:
             fout.write("\n")  #Write a return on a new line if not at the last row
-
-
-def proportion_class_grid(cl, opt=""):   #If used with a landuse raster, 'opt' parameter should be like 'opt="_landuse"'
-    '''
-    Function calculating the proportion of each class within a grid of ('tile_size' x 'tile_size')
-    '''
-    #compute sum of pixels of the current class in each grid
-    if opt=="":
-        grid_stat_csv=os.path.join(outputdirectory_grid,"lc_sum_"+cl+".csv")
-    else:
-        grid_stat_csv=os.path.join(outputdirectory_grid,opt+"_sum_"+cl+".csv")
-    gscript.run_command('i.segment.stats', quiet=True, overwrite=True, map='clumped_grid', area_measures="", rasters="class_"+cl+opt, raster_statistics='sum', csvfile=grid_stat_csv, separator='comma')
-    #Transform the value in the .csv into a proportion
-    global nsres, ewres
-    nsres, ewres = Data_prep("class_"+cl+opt)[0:2] #Get the north-south and east-west resolutions of the current raster
-    compute_proportion_csv(grid_stat_csv, type_raster="grid") #Create a new csv containing the proportion
-
 
 
 def atoi(text):   #Return integer if text is digit - Used in 'natural_keys' function
@@ -420,15 +412,13 @@ def RandomForest(vector,id):
 
     ## Make a list with name of covariables columns        ##TODO: Again, it could be great to have more explicit co-variables names in the output plot with feature importances
     list_covar=[]
-    for lc in lc_classes_list:
-        list_covar.append("class_"+lc+"_sum")
+    for cl in lc_classes_list:
+        list_covar.append("LC_"+cl+"_proportion")
     if (Land_use != ''):
         for cl in lu_classes_list:
-            list_covar.append("class_"+cl+"morpho_sum")
+            list_covar.append("LU_"+cl+"_proportion")
     if(distance_to != ''):
         list_covar.append(distance_to+"_mean")
-    first_covar = list_covar[0]   #Save the name of the first covariate to be used
-    last_covar = list_covar[-1]  #Save the name of the last covariate to be used
 
     ## Saving variable to predict (dependent variable)
     y = df_admin['log_population_density']
@@ -634,18 +624,18 @@ def main():
     ## Create binary raster for each class.
     #for landcover
     gscript.run_command('g.region', raster=Land_cover.split("@")[0])  #Set the region to match the extend of the raster
-    binary_lc = Parallel(n_jobs=n_jobs,backend="threading")(delayed(create_binary_raster, check_pickle=False)(Land_cover.split("@")[0], cl ,"",) for cl in lc_classes_list)
+    binary_lc = Parallel(n_jobs=n_jobs,backend="threading")(delayed(create_binary_raster, check_pickle=False)(Land_cover.split("@")[0], cl ,) for cl in lc_classes_list)
     #for landuse
     if(Land_use != '' ):
         gscript.run_command('g.region', raster=Land_use.split("@")[0])  #Set the region to match the extend of the raster
-        binary_lu = Parallel(n_jobs=n_jobs,backend="threading")(delayed(create_binary_raster, check_pickle=False)(Land_use.split("@")[0], cl ,"morpho",) for cl in lu_classes_list)
+        binary_lu = Parallel(n_jobs=n_jobs,backend="threading")(delayed(create_binary_raster, check_pickle=False)(Land_use.split("@")[0], cl ,) for cl in lu_classes_list)
 
     ## calculating classes' proportions within each grid and administrative unit
-    grid_lc = Parallel(n_jobs=n_jobs,backend="threading")(delayed(proportion_class_grid, check_pickle=False)(cl ,"",) for cl in lc_classes_list)
-    admin_lc = Parallel(n_jobs=n_jobs,backend="threading")(delayed(proportion_class_admin, check_pickle=False)(cl ,"",) for cl in lc_classes_list)
+    grid_lc = Parallel(n_jobs=n_jobs,backend="threading")(delayed(proportion_class, check_pickle=False)(outputdirectory_grid, Land_cover.split("@")[0], cl,) for cl in lc_classes_list)
+    admin_lc = Parallel(n_jobs=n_jobs,backend="threading")(delayed(proportion_class, check_pickle=False)(outputdirectory_admin, Land_cover.split("@")[0], cl,) for cl in lc_classes_list)
     if(Land_use != '' ):
-            grid_lu = Parallel(n_jobs=n_jobs,backend="threading")(delayed(proportion_class_grid, check_pickle=False)(cl, "morpho",) for cl in lu_classes_list)
-            admin_lu = Parallel(n_jobs=n_jobs,backend="threading")(delayed(proportion_class_admin, check_pickle=False)(cl, "morpho",) for cl in lu_classes_list)
+            grid_lu = Parallel(n_jobs=n_jobs,backend="threading")(delayed(proportion_class, check_pickle=False)(outputdirectory_grid, Land_use.split("@")[0], cl,) for cl in lu_classes_list)
+            admin_lu = Parallel(n_jobs=n_jobs,backend="threading")(delayed(proportion_class, check_pickle=False)(outputdirectory_admin, Land_use.split("@")[0], cl,) for cl in lu_classes_list)
 
     ## adding distance to places of interest data to the attribute table of the gridded vector and calculate its mean for each administrative unit
     if(distance_to !=''):
@@ -659,11 +649,11 @@ def main():
     ## Join .csv files of statistics
     for directory in [outputdirectory_grid, outputdirectory_admin]:
         allstatfile=os.path.join(directory,"all_stats.csv")
-        pattern_A="prop_lc*.csv"   #Add all proportions from Land cover or Land use raster
+        pattern_A="LC_*_prop.csv"   #Add all csv with proportions of Land cover classes
         pattern_B=""
         pattern_C=""
         if(Land_use != '' ):
-            pattern_B="prop_morpho*.csv"
+            pattern_B="LU_*_prop.csv"  #Add all csv with proportions of Land use classes
         if distance_to !='':
             pattern_C="mean_*.csv"     #Add mean distance to amenity if the option was used
         join_csv(directory,allstatfile,pattern_A,pattern_B,pattern_C)
