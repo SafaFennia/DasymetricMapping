@@ -13,7 +13,7 @@
 #*
 #*
 #*             First Version: 2017/07/18
-#*             Second Version: 2017/11/05
+#*             Second Version: 2017/11/13
 #*
 #*             This program is free software under the
 #*             GNU General Public License (>=v2).
@@ -84,6 +84,12 @@
 #% key: plot
 #% description: Name for output plot of model's feature importances
 #% required: yes
+#% guisection: Output
+#%end
+#%option G_OPT_F_OUTPUT
+#% key: log_file
+#% description: Name for output file with logging of the random forest run
+#% required: no
 #% guisection: Output
 #%end
 #%option
@@ -167,8 +173,9 @@ except:
 
 def cleanup():
     gscript.run_command('g.remove', quiet=True, type='raster', name=','.join(TMP_MAPS), flags='fb')
-    for tmp_csv in TMP_CSV:
-        os.remove(tmp_csv)
+    #for tmp_csv in TMP_CSV:
+        #if os.path.isfile(tmp_csv):
+            #os.remove(tmp_csv)
 
 def create_tempdirs():
     # Temporary directory for administrative units statistics
@@ -215,7 +222,6 @@ def admin_boundaries(vector, id):
     gscript.run_command('v.to.rast', quiet=True, input=vector, type='area', output='gridded_admin_units', use='attr', attribute_column=id, overwrite=True)
     gscript.run_command('r.to.vect', quiet=True, input='gridded_admin_units', output=vector.split("@")[0]+'_'+str(tile_size)+'m_gridded', type='area', column=id, flags='v',overwrite=True)
     gscript.run_command('v.db.join', map_=vector.split("@")[0]+'_'+str(tile_size)+'m_gridded', column='cat', other_table=vector, other_column=id, subset_columns=population) #join the population count
-    print "Create raster of administrative units with spatial resolution of "+str(tile_size)+" meters"
     TMP_MAPS.append("gridded_admin_units")
 
 
@@ -226,7 +232,6 @@ def area_gridded_admin():
     #compute sum of pixels of the current class
     admin_area_output=os.path.join(outputdirectory_admin,"area.csv")
     gscript.run_command('i.segment.stats', flags="r", quiet=True, overwrite=True, map='gridded_admin_units', area_measures='area', csvfile=admin_area_output, separator='comma')
-    print "Computing area of (gridded) administrative units"
     TMP_CSV.append(admin_area_output)
 
     # Create a list with area of each administrative zones
@@ -244,7 +249,7 @@ def proportion_class(outputdirectory, rasterLayer, cl):
     Function calculating classes' proportions for administrative units or for regular grid
     '''
     #Compute sum of pixels of the current class
-    prefix='LC' if rasterLayer==Land_cover else 'LU'
+    prefix='LC' if rasterLayer==Land_cover.split("@")[0] else 'LU'
     stat_csv=os.path.join(outputdirectory,prefix+"_"+cl+".csv")
     TMP_CSV.append(stat_csv)
     ref_map='gridded_admin_units' if outputdirectory==outputdirectory_admin else 'clumped_grid'
@@ -263,12 +268,11 @@ def create_clumped_grid(tile_size):
     gscript.run_command('r.mask', flags='r')
     TMP_MAPS.append("empty_grid")
     TMP_MAPS.append("clumped_grid")
-    print "Create a grid raster with spatial resolution of "+str(tile_size)+" meters"
 
 
 def create_binary_raster(rasterLayer, cl):
     #Create a binary raster for the current class
-    prefix='LC' if rasterLayer==Land_cover else 'LU'
+    prefix='LC' if rasterLayer==Land_cover.split("@")[0] else 'LU'
     binary_class = prefix+"_"+cl
     gscript.run_command('r.mapcalc', expression=binary_class+'=if('+rasterLayer+'=='+str(cl)+',1,0)',overwrite=True)
     gscript.run_command('r.null', map=binary_class, null='0')
@@ -415,7 +419,7 @@ def RandomForest(vector,id):
     Function that creates a random forest model trained at the administrative units level to generate gridded prediction
     covariates are proportion of each Land Cover's class (opt: with proportion of each land use's class)
     '''
-
+    global log_text
     # -------------------------------------------------------------------------
     # Data preparation for administrative units
     # -------------------------------------------------------------------------
@@ -462,7 +466,7 @@ def RandomForest(vector,id):
         for cl in lu_classes_list:
             list_covar.append("LU_"+cl+"_proportion")
     if(distance_to != ''):
-        list_covar.append(distance_to+"_mean")
+        list_covar.append(distance_to.split("@")[0]+"_mean")
 
     ## Saving variable to predict (dependent variable)
     y = df_admin['log_population_density']
@@ -547,14 +551,16 @@ def RandomForest(vector,id):
         os.makedirs(os.path.split(plot)[0])
     plt.savefig(plot+'.png', bbox_inches='tight', dpi=400)
 
-    print('oob_score = '+str(regressor.oob_score_))  ##TODO: Allow to create a log text file with value of OOB
-
+    message='Random forest internal Out-of-bag score (OOB) = '+str(regressor.oob_score_)
+    log_text+=message+'\n'
+    print message
 
 def main():
-    global TMP_MAPS, TMP_CSV, vector, Land_cover, Land_use, distance_to, tile_size, id, population, built_up, output, plot, nsres, ewres, lc_classes_list, lu_classes_list, lc_class_name, lu_class_name
+    global TMP_MAPS, TMP_CSV, vector, Land_cover, Land_use, distance_to, tile_size, id, population, built_up, output, plot, log_file, log_text, nsres, ewres, lc_classes_list, lu_classes_list, lc_class_name, lu_class_name
     TMP_MAPS = []
     TMP_CSV = []
-
+    start_time=time.ctime()
+    log_text=""
     # user's values
     vector = options['vector']
     Land_cover = options['land_cover']
@@ -566,6 +572,7 @@ def main():
     built_up = options['built_up_category'] if options['built_up_category'] else ""
     output = options['output']
     plot = options['plot']
+    log_file = options['log_file'] if options['log_file'] else ""
     lc_list = options['lc_list'].split(",") if options['lc_list'] else ""
     lu_list = options['lu_list'].split(",") if options['lu_list'] else ""
     lc_class_name = options['lc_class_name'] if options['lc_class_name'] else ""
@@ -664,7 +671,9 @@ def main():
     else:
         lc_classes_list = lc_list
         lc_classes_list.sort(key=float)  #Make sur the list provided by the user is well sorted.
-    print "Classes of raster '"+str(Land_cover.split("@")[0])+"' to be used: "+",".join(lc_classes_list)
+    message="Classes of raster '"+str(Land_cover)+"' used: "+",".join(lc_classes_list)
+    log_text+=message+'\n'
+    print message
 
     # Data preparation : extract list of classes from the land use
     if(Land_use != '' ):
@@ -673,7 +682,9 @@ def main():
         else:
             lu_classes_list = lu_list
             lu_classes_list.sort(key=float)  #Make sur the list provided by the user is well sorted.
-        print "Classes of raster '"+str(Land_use.split("@")[0])+"' to be used: "+",".join(lu_classes_list)
+        message="Classes of raster '"+str(Land_use)+"' used: "+",".join(lu_classes_list)
+        log_text+=message+'\n'
+        print message
 
     ## Create binary raster for each class.
     #for landcover
@@ -696,11 +707,13 @@ def main():
         # For grids
         grid_stat_output=os.path.join(outputdirectory_grid,"mean_dist.csv")
         TMP_CSV.append(grid_stat_output)
-        gscript.run_command('i.segment.stats', quiet=True, overwrite=True, map='clumped_grid', area_measures="", rasters=distance_to, raster_statistics='mean', csvfile=grid_stat_output, separator='comma')
+        gscript.run_command('i.segment.stats', quiet=True, overwrite=True, map='clumped_grid', area_measures="", rasters=distance_to.split("@")[0], raster_statistics='mean', csvfile=grid_stat_output, separator='comma')
         # For administrative zones
         admin_stat_output=os.path.join(outputdirectory_admin,"mean_dist.csv")
         TMP_CSV.append(admin_stat_output)
-        gscript.run_command('i.segment.stats', quiet=True, overwrite=True, map='gridded_admin_units', area_measures="", rasters=distance_to, raster_statistics='mean', csvfile=admin_stat_output, separator='comma')
+        gscript.run_command('i.segment.stats', quiet=True, overwrite=True, map='gridded_admin_units', area_measures="", rasters=distance_to.split("@")[0], raster_statistics='mean', csvfile=admin_stat_output, separator='comma')
+        # Save log
+        log_text+='Distance raster used : '+str(distance_to)+'\n'
 
     ## Join .csv files of statistics
     for directory in [outputdirectory_grid, outputdirectory_admin]:
@@ -717,6 +730,15 @@ def main():
     ## Random Forest
     RandomForest(vector.split("@")[0],id)
 
+    ## Export the log file
+    end_time=time.ctime()
+    logging=open(log_file+'.txt', 'w')
+    logging.write('Log file of r.population.density\n')
+    logging.write('Run started on '+str(start_time)+' and finished on '+str(end_time)+'\n')
+    logging.write('Selected spatial resolution for weighting layer : '+tile_size+' meters\n')
+    logging.write('Administrative layer used : '+vector+'\n')
+    logging.write(log_text)
+    logging.close()
 
 # exécution
 if __name__ == "__main__":
