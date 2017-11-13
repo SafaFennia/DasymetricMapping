@@ -2,13 +2,13 @@
 
 <em>r.population.density</em> creates a weighting layer to be used for redistribution of population count known at some administrative unit level into a raster grid with a finest spatial resolution <em><a href="https://en.wikipedia.org/wiki/Dasymetric_map">(dasymetric mapping)</a></em>. The add-on trains a Random Forest (regression) model at the level of administrative units and predict a weight in a raster grid. The spatial resolution of this raster should be specified via the <b>tile_size</b> parameter, and its name via the <b>output</b> parameter.
 
-<p> Random Forest's explanatory variables (i.e. covariates, predictors) are essentially the proportion of each class of a land cover map (<b>land_cover</b> parameter). Optionally, other variables can be added to the model. It includes proportion of any other raster's class (like land use map...) passed through the <b>raster</b> parameter, and/or a raster of distance to the nearest point of interest (e.g. distance to the nearest road, school, hospital, university...) passed through the <b>distance_to</b> parameter.
+<p> Random Forest's explanatory variables (i.e. covariates, predictors) are essentially the proportion of each class of a land cover map (<b>land_cover</b> parameter). Optionally, other variables can be added to the model. It includes proportion of any other raster's class (like land use map...) passed through the <b>land_use</b> parameter, and/or a raster of distance to the nearest point of interest (e.g. distance to the nearest road, school, hospital, university...) passed through the <b>distance_to</b> parameter.
 
 <p> The administrative units should be provided as a vector layer using the <b>vector</b> parameter. Regarding to the attribute table connected to this vector layer, a column containing a unique identifier should be specified via the <b>id</b> parameter and the column containing the value to be used as response variable (population count or any other response variable) via the <b>population</b> parameter.
 
-<p> It is possible not to use all the classes whether for the land cover map or for the optional raster. For that purpose, a list of classes to be used should be specified via the <b>lc_list</b> parameter (for land cover map) or the <b>raster_list</b> parameter (for an additional map).
+<p> It is possible not to use all the classes from the land cover map or from the optional raster. For that purpose, a list of classes to be used should be specified via the <b>lc_list</b> parameter (for land cover map) or the <b>lu_list</b> parameter (for a land use additional map).
 
-<p> The <em><a href="https://en.wikipedia.org/wiki/Out-of-bag_error">out-of-bag error</a></em> of the model is printed in the console and give an indication about the internal accuracy of the model (cross-validation on training set at the administrative units level). 
+<p> The <em><a href="https://en.wikipedia.org/wiki/Out-of-bag_error">out-of-bag error</a></em> (OOB) of the model is printed in the console and give an indication about the internal accuracy of the model (cross-validation on training set at the administrative units level). The log of the Random Forest run (including the OOB error) can optionally be save in a file whose name have to be specified via the <b>log_file</b> parameter.
 
 <p> Feature importances in the model are ploted in a graph, whose name have to be specified via the <b>plot</b> parameter. In option, a table with correspondances between rasters categories and classes name could be provided in a .csv file using <b>lc_class_name</b> and the <b>lu_class_name</b> parameters. The file cannot have any special character and have to be formatted as follows:
 <div class="code"><pre>
@@ -48,13 +48,21 @@
 r.population.density.py vector=admin_level_4 land_cover=my_landcover_map tile_size=100 id=CAT population=pop_tot output=weighting_raster_100m plot=/home/user/importance_plot n_jobs=4
 
 # Generate a weighting layer using land cover map and land use map
-r.population.density.py vector=admin_level_4 land_cover=my_landcover_map raster=my_landuse_map tile_size=100 id=CAT population=pop_tot output=weighting_raster_100m plot=/home/user/importance_plot n_jobs=4
+r.population.density.py vector=admin_level_4 land_cover=my_landcover_map landu_use=my_landuse_map tile_size=100 id=CAT population=pop_tot output=weighting_raster_100m plot=/home/user/importance_plot n_jobs=4
+
+# Generate a weighting layer using land cover map and land use map, providing the classes' names for feature importance plot
+r.population.density.py vector=admin_level_4 land_cover=my_landcover_map landu_use=my_landuse_map distance_to=nearest_school tile_size=100 id=CAT population=pop_tot output=weighting_raster_100m plot=/home/user/importance_plot lc_class_name=/home/user/landcover_legend.csv lc_class_name=/home/user/landuse_legend.csv n_jobs=4
+
+# Generate a weighting layer using land cover map and land use map, with option for saving the log file
+r.population.density.py vector=admin_level_4 land_cover=my_landcover_map landu_use=my_landuse_map distance_to=nearest_school tile_size=100 id=CAT population=pop_tot output=weighting_raster_100m plot=/home/user/importance_plot log_file=/home/user/rf_run_log n_jobs=4
 
 # Generate a weighting layer using land cover map, land use map and distance to nearest school
-r.population.density.py vector=admin_level_4 land_cover=my_landcover_map raster=my_landuse_map distance_to=nearest_school tile_size=100 id=CAT population=pop_tot output=weighting_raster_100m plot=/home/user/importance_plot n_jobs=4
+r.population.density.py vector=admin_level_4 land_cover=my_landcover_map landu_use=my_landuse_map distance_to=nearest_school tile_size=100 id=CAT population=pop_tot output=weighting_raster_100m plot=/home/user/importance_plot n_jobs=4
 
 # Generate a weighting layer using only category 3,4 of land cover map, category 8,9 of land use map and distance to nearest school
-r.population.density.py vector=admin_level_4 land_cover=my_landcover_map raster=my_landuse_map distance_to=nearest_school tile_size=100 id=CAT population=pop_tot output=weighting_raster_100m plot=/home/user/importance_plot lc_list=3,4 raster_list=8,9 n_jobs=4
+r.population.density.py vector=admin_level_4 land_cover=my_landcover_map landu_use=my_landuse_map distance_to=nearest_school tile_size=100 id=CAT population=pop_tot output=weighting_raster_100m plot=/home/user/importance_plot lc_list=3,4 lu_list=8,9 n_jobs=4
+
+
 </pre></div>
 
 <center>
