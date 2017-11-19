@@ -216,17 +216,32 @@ def category_list_check(cat_list, raster_map):
         if cat not in existing_cat:
             gscript.fatal(_("Some categories provided via a list does not exists in <%s> raster. Please check.") % raster_map)
 
+def check_no_missing_zones(vector_origin, vector_gridded):
+    '''
+    Function checking if the number of items (admin zones) in the original vector provided by the user is wall conserved after the rasterization.
+    If the original vector contains small sized polygons (or very tight) and desired 'tile_size' is too large, some polygons could disappeared during the rasterization process
+    '''
+    origin_n=gscript.parse_command('v.db.univar', flags='g', map=vector_origin, column='cat')['n']
+    gridded_n=gscript.parse_command('v.db.univar', flags='g', map=vector_gridded, column='cat')['n']
+    if origin_n != gridded_n:
+        gscript.run_command('g.remove', quiet=True, type='vector', name=vector_gridded, flags='fb')
+        message=_(("A tile size of %s m seems to large and produce loss of some administrative units when rasterizing them.\n") % tile_size)
+        message+=_(("Try to reduce the 'tile_size' parameter or edit the <%s> vector to merge smallest administrative units with their neighoring units") % vector_origin)
+        gscript.fatal(message)
+
 def admin_boundaries(vector, id):
     '''
     Function convecting the vecotor to raster then raster to vector: boundaries will have a staircase appearence
     so that each tile of the gridded vector will be contained in only one administrative unit
     '''
+    global gridded_vector
+    gridded_vector=vector.split("@")[0]+'_'+str(tile_size)+'m_gridded'
     gscript.run_command('g.region', raster='clumped_grid')
     gscript.run_command('v.to.rast', quiet=True, input=vector, type='area', output='gridded_admin_units', use='attr', attribute_column=id, overwrite=True)
-    gscript.run_command('r.to.vect', quiet=True, input='gridded_admin_units', output=vector.split("@")[0]+'_'+str(tile_size)+'m_gridded', type='area', column=id, flags='v',overwrite=True)
-    gscript.run_command('v.db.join', map_=vector.split("@")[0]+'_'+str(tile_size)+'m_gridded', column='cat', other_table=vector, other_column=id, subset_columns=population) #join the population count
+    gscript.run_command('r.to.vect', quiet=True, input='gridded_admin_units', output=gridded_vector, type='area', column=id, flags='v',overwrite=True)
+    gscript.run_command('v.db.join', map_=gridded_vector, column='cat', other_table=vector, other_column=id, subset_columns=population) #join the population count
     TMP_MAPS.append("gridded_admin_units")
-
+    check_no_missing_zones(vector,gridded_vector)
 
 def area_gridded_admin():
     '''
@@ -452,12 +467,12 @@ def RandomForest(vector,id):
     # Join to each gridded administrative unit the population, the area and all the statistics
     gscript.run_command('db.in.ogr', quiet=True, overwrite=True, input=os.path.join(outputdirectory_admin,"area.csv"), output='area_admin') #Import the temporary .csv containing the area of the gridded administrative unit
     gscript.run_command('db.in.ogr', quiet=True, overwrite=True, input=os.path.join(outputdirectory_admin,"all_stats.csv"), output='stat_admin') #Import the temporary .csv containing the statistics of the gridded administrative unit
-    gscript.run_command('v.db.join', quiet=True, map_=vector.split("@")[0]+'_'+str(tile_size)+'m_gridded', column='cat', other_table='area_admin', other_column='cat_', subset_columns='area') # Join the table containing the area
-    gscript.run_command('v.db.join', quiet=True, map_=vector.split("@")[0]+'_'+str(tile_size)+'m_gridded', column='cat', other_table='stat_admin', other_column='cat_') # Join the table containing the statistics
+    gscript.run_command('v.db.join', quiet=True, map_=gridded_vector, column='cat', other_table='area_admin', other_column='cat_', subset_columns='area') # Join the table containing the area
+    gscript.run_command('v.db.join', quiet=True, map_=gridded_vector, column='cat', other_table='stat_admin', other_column='cat_') # Join the table containing the statistics
     # Compute the log of population density
-    gscript.run_command('v.db.addcolumn', quiet=True, map_=vector.split("@")[0]+'_'+str(tile_size)+'m_gridded', column= "log_population_density double precision")  #add a new column which will contain the log of density
+    gscript.run_command('v.db.addcolumn', quiet=True, map_=gridded_vector, column= "log_population_density double precision")  #add a new column which will contain the log of density
     admin_attribute_table=os.path.join(outputdirectory_admin,"admin_attribute.csv") # Define the path to the .csv
-    gscript.run_command('db.out.ogr', quiet=True, overwrite=True, input=vector.split("@")[0]+'_'+str(tile_size)+'m_gridded', output=admin_attribute_table , format='CSV') #Export the attribute table in .csv
+    gscript.run_command('db.out.ogr', quiet=True, overwrite=True, input=gridded_vector, output=admin_attribute_table , format='CSV') #Export the attribute table in .csv
     attr_table = pd.read_csv(admin_attribute_table) #reading the csv file as dataframe
     # Filling the log population density column
     log = attr_table['log_population_density']
@@ -582,7 +597,7 @@ def RandomForest(vector,id):
     print message
 
 def main():
-    global TMP_MAPS, TMP_CSV, vector, Land_cover, Land_use, distance_to, tile_size, id, population, built_up, output, plot, log_file, log_text, nsres, ewres, lc_classes_list, lu_classes_list, lc_class_name, lu_class_name
+    global TMP_MAPS, TMP_CSV, vector, gridded_vector, Land_cover, Land_use, distance_to, tile_size, id, population, built_up, output, plot, log_file, log_text, nsres, ewres, lc_classes_list, lu_classes_list, lc_class_name, lu_class_name
     TMP_MAPS = []
     TMP_CSV = []
     start_time=time.ctime()
