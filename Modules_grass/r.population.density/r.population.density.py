@@ -150,12 +150,6 @@ import multiprocessing
 from multiprocessing import Pool
 from functools import partial 
 
-## Import Joblib library (multiprocessing)
-try:
-    from joblib import Parallel, delayed   #TODO: remove dependency to Joblib
-except:
-    gscript.fatal("Joblib is not installed ")
-
 ## Import Pandas library (View and manipulaiton of tables)
 try:
     import pandas as pd  #TODO: remove dependency to Pandas
@@ -259,22 +253,6 @@ def area_gridded_admin():
         area_list.append(row.split("\n")[0].split(",")[1]) #For each line, save the second column in the list named 'area_list'
 
 
-def proportion_class(outputdirectory, rasterLayer, cl):
-    '''
-    Function calculating classes' proportions for administrative units or for regular grid
-    '''
-    #Compute sum of pixels of the current class
-    prefix='LC' if rasterLayer==Land_cover.split("@")[0] else 'LU'
-    stat_csv=os.path.join(outputdirectory,prefix+"_"+cl+".csv")
-    TMP_CSV.append(stat_csv)
-    ref_map='gridded_admin_units' if outputdirectory==outputdirectory_admin else 'clumped_grid'
-    gscript.run_command('i.segment.stats', quiet=True, overwrite=True, map=ref_map, area_measures="", rasters=prefix+"_"+cl, raster_statistics='sum', csvfile=stat_csv, separator='comma')
-    #Compute the proportion
-    global nsres, ewres
-    nsres, ewres = Data_prep(prefix+"_"+cl)[0:2] #Get the north-south and east-west resolution of the current raster
-    compute_proportion_csv(stat_csv) #Create a new csv containing the proportion
-
-
 def create_clumped_grid(tile_size):
     '''
     Function creating clumped grid which will be used for computing raster's classes proportion at grid level. This clumped grid will
@@ -289,59 +267,79 @@ def create_clumped_grid(tile_size):
     TMP_MAPS.append("clumped_grid")
 
     
-def create_binary_raster(rasterLayer, cl):
+def random_string(N):
     '''
-    Function creating a binary raster for class 'cl' in raster 'rasterLayer'. The computational region should be defined properly before running this function
+    Function generating a random string of size N
     '''
-    #Create a binary raster for the current class
-    prefix = 'LC' if rasterLayer == Land_cover.split("@")[0] else 'LU'  # Adaptative prefix according to the input raster (land_cover of land_use)
-    binary_class = prefix+"_"+cl  # Set the name of the binary raster
-    gscript.run_command('r.mapcalc', expression='%s=if(%s==%s,1,0)'%(binary_class,rasterLayer,cl),overwrite=True) # Mapcalc to create binary raster for the expected class 'cl'
-    gscript.run_command('r.null', map=binary_class, null='0')   # Fill potential remaining null values with 0 value
-    return binary_class
-
+    import random, string
+    prefix=random.choice(string.ascii_uppercase + string.ascii_lowercase)
+    suffix=''.join(random.choice(string.ascii_uppercase + string.ascii_lowercase + string.digits) for _ in range(N))
+    return prefix+suffix
     
+    
+def proportion_class(rasterLayer, cl):
+    '''
+    Function extracting a binary map for class 'cl' in raster 'rasterLayer', then computing the proportion of this class in both administratives units and in grids. 
+    The computational region should be defined properly before running this function. 
+    '''
+    ### Create a binary raster for the current class
+    prefix = 'LC' if rasterLayer == Land_cover.split("@")[0] else 'LU'  # Adaptative prefix according to the input raster (land_cover of land_use)
+    binary_raster = prefix+"_"+cl  # Set the name of the binary raster
+    gscript.run_command('r.mapcalc', expression='%s=if(%s==%s,1,0)'%(binary_raster,rasterLayer,cl),overwrite=True) # Mapcalc to create binary raster for the expected class 'cl'
+    gscript.run_command('r.null', map=binary_raster, null='0')   # Fill potential remaining null values with 0 value
+    ### Compute proportion of pixels of the current class - Administrative units
+    stat_csv=os.path.join(outputdirectory_admin,"%s_%s.csv"%(prefix,cl))
+    ref_map='gridded_admin_units'
+    gscript.run_command('i.segment.stats', quiet=True, overwrite=True, map=ref_map, area_measures="area", rasters=binary_raster, raster_statistics='sum', csvfile=stat_csv, separator='comma')
+    output_csv_1=compute_proportion_csv(stat_csv) #Create a new csv containing the proportion
+    ### Compute proportion of pixels of the current class - Grids
+    stat_csv=os.path.join(outputdirectory_grid,"%s_%s.csv"%(prefix,cl))
+    ref_map='clumped_grid'
+    gscript.run_command('i.segment.stats', quiet=True, overwrite=True, map=ref_map, area_measures="area", rasters=binary_raster, raster_statistics='sum', csvfile=stat_csv, separator='comma')
+    output_csv_2=compute_proportion_csv(stat_csv) #Create a new csv containing the proportion
+    # Return lists
+    return (binary_raster,output_csv_1,output_csv_2)
+    
+
 def compute_proportion_csv(infile):
     '''
-    Function used in 'proportion_class' function. It take as input the csv from i.segment.stats with
-    the sum of pixels and create a new csv with the proportion
+    Function used in 'proportion_class' function. It take as input the csv from i.segment.stats with the area (in number of pixels)
+    the sum of pixels of the binary raster and create a new csv with the proportion
     '''
-    fin = open(infile) #Open the infile .csv
-    # Set the path to the outputfile and open it
+    # Set the path to the outputfile
     head, tail = os.path.split(infile)
     root, ext = os.path.splitext(tail)
     outfile=os.path.join(head,root+"_prop"+ext)
-    TMP_CSV.append(outfile)
-    fout = open(outfile, 'w') #Create and open a new .csv to be written
-
-    # Count number of row in the csv file
-    nline=0
-    for row in fin:
-        nline+=1
-
-    # Loop on each row and column of the .csv file and compute proportion
-    fin = open(infile)
-    for rowid, row in enumerate(fin):
-        currentrow=[] #Define an empty list which will be filled with values for the new line to be writen
-        if rowid==0:
-            currentrow.append(row.split("\n")[0].split(',')[0])
-            col_name=row.split("\n")[0].split(',')[-1]
-            index=col_name.find("_sum")
-            if index != -1:
-                currentrow.append(col_name[:index]+'_proportion')
-        else:
-            for colid, col in enumerate(row.split(",")):
-                if colid==0:
-                    currentrow.append(col)
-                else:
-                    if os.path.split(head)[-1]=="admin_level":  #If proportion computed for the administratives zones
-                        proportion_value=((float(col)*(ewres*nsres))/(float(area_list[rowid-1])*float(tile_size)**2))*100
-                    elif os.path.split(head)[-1]=="grid_level":  #If proportion computed for the regular grids
-                        proportion_value=((float(col)*(ewres*nsres))/(float(tile_size)**2))*100
-                    currentrow.append('{0:.8f}'.format(proportion_value))  #Round to 8 decimals and add the value in the current row
-        fout.write(",".join(currentrow))  #Write the new row
-        if rowid < nline-1:
-            fout.write("\n")  #Write a return on a new line if not at the last row
+    # Create new csv reader and writer objects
+    reader=csv.reader(open(infile,'r'), delimiter=",")
+    writer=csv.writer(open(outfile,'w'), delimiter=",")
+    # Initialize empty lists
+    crash_report=[]
+    content=[]
+    # Save the first line as header and create the new header
+    header=reader.next()
+    new_header=[]
+    new_header.append(header[0])
+    index=header[2].find("_sum")
+    new_header.append(header[2][:index]+'_proportion')
+    content.append(new_header)  #Create new header with first original column and current class related name for proportion
+    # Loop through the rest of the rows (header is passed)
+    for row in reader:
+        pix_nb=float(row[1]) #Area of the unit (in number of pixels)
+        class_nb=float(row[2]) #Number of pixels of current class (binary raster)
+        try:
+            prop=100*class_nb/pix_nb
+            content.append([row[0],"{0:.5f}".format(prop)])
+        except ZeroDivisionError:  #If computation of proportion failed because of 'ZeroDivisionError'
+            crash_report.append(row[0])
+            continue
+    writer.writerows(content)
+    os.remove(infile)
+    # Print notification of ZeroDivisionError if it happened
+    if len(crash_report)>0:
+        print "An 'ZeroDivisionError' has been registered for the following <%s>"%header[0]+"\n".join(crash_report)
+    # Return the path to the temporary csv file
+    return outfile
 
 
 def atoi(text):
@@ -452,7 +450,7 @@ def labels_from_csv(current_labels):
             new_label.append(l)
     return new_label
 
-def RandomForest(vector,id):
+def RandomForest(weigthing_layer_name,vector,id):
     '''
     Function that creates a random forest model trained at the administrative units level to generate gridded prediction
     covariates are proportion of each Land Cover's class (opt: with proportion of each land use's class)
@@ -550,7 +548,7 @@ def RandomForest(vector,id):
     f.write(rule)
     f.close()
 
-    ## Reclass segments raster layer to keep only training segments, using the reclas_rule.csv file
+    ## Reclass segments raster layer
     gscript.run_command('g.region', raster='clumped_grid')
     gscript.run_command('r.reclass', quiet=True, overwrite=True, input="clumped_grid", output="weight_int", rules=outputcsv)
     gscript.run_command('r.mapcalc', expression="weight_float=float(weight_int)/float(1000000000)", quiet=True, overwrite=True) #Get back to the original 'float' prediction of population density of random forest
@@ -559,12 +557,12 @@ def RandomForest(vector,id):
 
     ## Force weight to zero if no built-up pixel in the grid
     if built_up =='':
-        gscript.run_command('r.mapcalc',expression=output+" = weight_float", overwrite=True)
+        gscript.run_command('r.mapcalc',expression="%s=weight_float"%weigthing_layer_name, overwrite=True)
     else:
         gscript.run_command('g.region', raster='clumped_grid')
-        gscript.run_command('r.resamp.stats', quiet=True, overwrite=True, input='class_'+str(built_up), output='sum_lc_'+str(built_up), method='sum')
-        gscript.run_command('r.mapcalc',expression=output+" = if( sum_lc_"+str(built_up)+" !=0,weight_float,0)", quiet=True, overwrite=True)
-        TMP_MAPS.append('sum_lc_'+str(built_up))
+        gscript.run_command('r.resamp.stats', quiet=True, overwrite=True, input='class_%s'%built_up, output='sum_lc_%s'%built_up, method='sum')
+        gscript.run_command('r.mapcalc',expression="%s=if(sum_lc_%s!=0,weight_float,0)"%(weigthing_layer_name,built_up), quiet=True, overwrite=True)
+        TMP_MAPS.append('sum_lc_%s'%built_up)
 
     # -------------------------------------------------------------------------
     # Feature importances
@@ -608,7 +606,7 @@ def main():
     id = options['id']
     population = options['population']
     built_up = options['built_up_category'] if options['built_up_category'] else ""
-    output = options['output']
+    output_weighting_layer = options['output']
     plot = options['plot']
     log_file = options['log_file'] if options['log_file'] else ""
     lc_list = options['lc_list'].split(",") if options['lc_list'] else ""
@@ -724,32 +722,31 @@ def main():
         log_text+=message+'\n'
         print message
 
-    ## Create binary raster for each class.
+    ## Compute proportion of each class of categorical raster (parallel processing).
     #for landcover
     gscript.run_command('g.region', raster=Land_cover.split("@")[0])  #Set the region to match the extend of the raster
     p=Pool(n_jobs) #Create a 'pool' of processes and launch them using 'map' function
-    func=partial(create_binary_raster,Land_cover.split("@")[0]) # Set fixed argument of the function
-    return_list=p.map(func,lc_classes_list) # Launch the processes for as many items in the list (if function with a return, the returned results are ordered thanks to 'map' function)
+    func=partial(proportion_class,Land_cover.split("@")[0]) # Set fixed argument of the function
+    output=p.map(func,lc_classes_list) # Launch the processes for as many items in the list (if function with a return, the returned results are ordered thanks to 'map' function)
     p.close()
     p.join()
-    [TMP_MAPS.append(x) for x in return_list]  # Append the name of binary rasters to the list of temporary maps
-    
+    temp_rasterlist,temp_csvlist_1,temp_csvlist_2=zip(*output)
+    [TMP_MAPS.append(x) for x in temp_rasterlist]  # Append the name of binary rasters to the list of temporary maps
+    [TMP_CSV.append(x) for x in temp_csvlist_1]  # Append the paths to .csv files to the list of temporary .csv
+    [TMP_CSV.append(x) for x in temp_csvlist_2]  # Append the paths to .csv files to the list of temporary .csv
+
     #for landuse
     if(Land_use != '' ):
         gscript.run_command('g.region', raster=Land_use.split("@")[0])  #Set the region to match the extend of the raster
         p=Pool(n_jobs) #Create a 'pool' of processes and launch them using 'map' function
-        func=partial(create_binary_raster,Land_use.split("@")[0]) # Set fixed argument of the function
-        return_list=p.map(func,lu_classes_list) # Launch the processes for as many items in the list (if function with a return, the returned results are ordered thanks to 'map' function)
+        func=partial(proportion_class,Land_use.split("@")[0]) # Set fixed argument of the function
+        output=p.map(func,lu_classes_list) # Launch the processes for as many items in the list (if function with a return, the returned results are ordered thanks to 'map' function)
         p.close()
         p.join()
-        [TMP_MAPS.append(x) for x in return_list] # Append the name of binary rasters to the list of temporary maps
-        
-    ## calculating classes' proportions within each grid and administrative unit
-    grid_lc = Parallel(n_jobs=n_jobs,backend="threading")(delayed(proportion_class, check_pickle=False)(outputdirectory_grid, Land_cover.split("@")[0], cl,) for cl in lc_classes_list)
-    admin_lc = Parallel(n_jobs=n_jobs,backend="threading")(delayed(proportion_class, check_pickle=False)(outputdirectory_admin, Land_cover.split("@")[0], cl,) for cl in lc_classes_list)
-    if(Land_use != '' ):
-            grid_lu = Parallel(n_jobs=n_jobs,backend="threading")(delayed(proportion_class, check_pickle=False)(outputdirectory_grid, Land_use.split("@")[0], cl,) for cl in lu_classes_list)
-            admin_lu = Parallel(n_jobs=n_jobs,backend="threading")(delayed(proportion_class, check_pickle=False)(outputdirectory_admin, Land_use.split("@")[0], cl,) for cl in lu_classes_list)
+        temp_rasterlist,temp_csvlist_1,temp_csvlist_2=zip(*output)
+        [TMP_MAPS.append(x) for x in temp_rasterlist]  # Append the name of binary rasters to the list of temporary maps
+        [TMP_CSV.append(x) for x in temp_csvlist_1]  # Append the paths to .csv files to the list of temporary .csv
+        [TMP_CSV.append(x) for x in temp_csvlist_2]  # Append the paths to .csv files to the list of temporary .csv
 
     ## adding distance to places of interest data to the attribute table of the gridded vector and calculate its mean for each administrative unit
     if(distance_to !=''):
@@ -777,7 +774,7 @@ def main():
         join_csv(directory,allstatfile,pattern_A,pattern_B,pattern_C)
 
     ## Random Forest
-    RandomForest(vector.split("@")[0],id)
+    RandomForest(output_weighting_layer,vector.split("@")[0],id)
 
     ## Export the log file
     end_time=time.ctime()
