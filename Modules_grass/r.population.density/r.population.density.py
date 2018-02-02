@@ -129,40 +129,36 @@
 #%end
 
 
-
+## Import standard python libraries
 import os, sys, glob, time
 import csv
 import atexit
 ## Import GRASS GIS Python Scripting Library
 import grass.script as gscript
-
 ## Import library for temporary files creation
 import tempfile
-
 ## Import Numpy library
 import numpy as np
-
 ## import math library
 import math as ma
-
 ## import pyplot library
 import matplotlib
 matplotlib.use('Agg') #use a non-interactive backend: prevent the figure from popping up
 import matplotlib.pyplot as plt
-
+# import multiprocessing and functools libraries
 import multiprocessing
-from multiprocessing import Process, Manager, Value, Lock
-import logging
+from multiprocessing import Pool
+from functools import partial 
 
 ## Import Joblib library (multiprocessing)
 try:
-    from joblib import Parallel, delayed
+    from joblib import Parallel, delayed   #TODO: remove dependency to Joblib
 except:
     gscript.fatal("Joblib is not installed ")
 
 ## Import Pandas library (View and manipulaiton of tables)
 try:
-    import pandas as pd
+    import pandas as pd  #TODO: remove dependency to Pandas
 except:
     gscript.fatal("Pandas is not installed ")
 
@@ -292,19 +288,19 @@ def create_clumped_grid(tile_size):
     TMP_MAPS.append("empty_grid")
     TMP_MAPS.append("clumped_grid")
 
-
+    
 def create_binary_raster(rasterLayer, cl):
     '''
-    Function creating a binary raster for class 'cl' in raster 'rasterLayer'
+    Function creating a binary raster for class 'cl' in raster 'rasterLayer'. The computational region should be defined properly before running this function
     '''
     #Create a binary raster for the current class
-    prefix='LC' if rasterLayer==Land_cover.split("@")[0] else 'LU'
-    binary_class = prefix+"_"+cl
-    gscript.run_command('r.mapcalc', expression=binary_class+'=if('+rasterLayer+'=='+str(cl)+',1,0)',overwrite=True)
-    gscript.run_command('r.null', map=binary_class, null='0')
-    TMP_MAPS.append(binary_class)
+    prefix = 'LC' if rasterLayer == Land_cover.split("@")[0] else 'LU'  # Adaptative prefix according to the input raster (land_cover of land_use)
+    binary_class = prefix+"_"+cl  # Set the name of the binary raster
+    gscript.run_command('r.mapcalc', expression='%s=if(%s==%s,1,0)'%(binary_class,rasterLayer,cl),overwrite=True) # Mapcalc to create binary raster for the expected class 'cl'
+    gscript.run_command('r.null', map=binary_class, null='0')   # Fill potential remaining null values with 0 value
+    return binary_class
 
-
+    
 def compute_proportion_csv(infile):
     '''
     Function used in 'proportion_class' function. It take as input the csv from i.segment.stats with
@@ -731,12 +727,23 @@ def main():
     ## Create binary raster for each class.
     #for landcover
     gscript.run_command('g.region', raster=Land_cover.split("@")[0])  #Set the region to match the extend of the raster
-    binary_lc = Parallel(n_jobs=n_jobs,backend="threading")(delayed(create_binary_raster, check_pickle=False)(Land_cover.split("@")[0], cl ,) for cl in lc_classes_list)
+    p=Pool(n_jobs) #Create a 'pool' of processes and launch them using 'map' function
+    func=partial(create_binary_raster,Land_cover.split("@")[0]) # Set fixed argument of the function
+    return_list=p.map(func,lc_classes_list) # Launch the processes for as many items in the list (if function with a return, the returned results are ordered thanks to 'map' function)
+    p.close()
+    p.join()
+    [TMP_MAPS.append(x) for x in return_list]  # Append the name of binary rasters to the list of temporary maps
+    
     #for landuse
     if(Land_use != '' ):
         gscript.run_command('g.region', raster=Land_use.split("@")[0])  #Set the region to match the extend of the raster
-        binary_lu = Parallel(n_jobs=n_jobs,backend="threading")(delayed(create_binary_raster, check_pickle=False)(Land_use.split("@")[0], cl ,) for cl in lu_classes_list)
-
+        p=Pool(n_jobs) #Create a 'pool' of processes and launch them using 'map' function
+        func=partial(create_binary_raster,Land_use.split("@")[0]) # Set fixed argument of the function
+        return_list=p.map(func,lu_classes_list) # Launch the processes for as many items in the list (if function with a return, the returned results are ordered thanks to 'map' function)
+        p.close()
+        p.join()
+        [TMP_MAPS.append(x) for x in return_list] # Append the name of binary rasters to the list of temporary maps
+        
     ## calculating classes' proportions within each grid and administrative unit
     grid_lc = Parallel(n_jobs=n_jobs,backend="threading")(delayed(proportion_class, check_pickle=False)(outputdirectory_grid, Land_cover.split("@")[0], cl,) for cl in lc_classes_list)
     admin_lc = Parallel(n_jobs=n_jobs,backend="threading")(delayed(proportion_class, check_pickle=False)(outputdirectory_admin, Land_cover.split("@")[0], cl,) for cl in lc_classes_list)
