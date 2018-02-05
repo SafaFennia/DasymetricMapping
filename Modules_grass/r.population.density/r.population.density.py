@@ -183,7 +183,6 @@ def create_tempdirs():
     if not os.path.exists(outputdirectory_grid):
         os.makedirs(outputdirectory_grid)
 
-
 def Data_prep(categorical_raster):
     '''
     Function that extracts resolution and sorted list of classes of a categorical raster (like land cover or land use information).
@@ -219,7 +218,8 @@ def check_no_missing_zones(vector_origin, vector_gridded):
         message=_(("A tile size of %s m seems to large and produce loss of some administrative units when rasterizing them.\n") % tile_size)
         message+=_(("Try to reduce the 'tile_size' parameter or edit the <%s> vector to merge smallest administrative units with their neighoring units") % vector_origin)
         gscript.fatal(message)
-
+    
+    
 def admin_boundaries(vector, id):
     '''
     Function convecting the vecotor to raster then raster to vector: boundaries will have a staircase appearence
@@ -233,26 +233,8 @@ def admin_boundaries(vector, id):
     gscript.run_command('v.db.join', map_=gridded_vector, column='cat', other_table=vector, other_column=id, subset_columns=population) #join the population count
     TMP_MAPS.append("gridded_admin_units")
     check_no_missing_zones(vector,gridded_vector)
-
-def area_gridded_admin():
-    '''
-    Function calculating classes' proportions within each administrative unit
-    '''
-    #compute sum of pixels of the current class
-    admin_area_output=os.path.join(outputdirectory_admin,"area.csv")
-    gscript.run_command('i.segment.stats', flags="r", quiet=True, overwrite=True, map='gridded_admin_units', area_measures='area', csvfile=admin_area_output, separator='comma')
-    TMP_CSV.append(admin_area_output)
-
-    # Create a list with area of each administrative zones
-    global area_list
-    area_list=[]
-    tmp_list=[]
-    f=open(admin_area_output)
-    f.next() #Pass the first line containing column headers
-    for row in f:
-        area_list.append(row.split("\n")[0].split(",")[1]) #For each line, save the second column in the list named 'area_list'
-
-
+    
+    
 def create_clumped_grid(tile_size):
     '''
     Function creating clumped grid which will be used for computing raster's classes proportion at grid level. This clumped grid will
@@ -265,7 +247,7 @@ def create_clumped_grid(tile_size):
     gscript.run_command('r.mask', flags='r')
     TMP_MAPS.append("empty_grid")
     TMP_MAPS.append("clumped_grid")
-
+    
     
 def random_string(N):
     '''
@@ -285,22 +267,29 @@ def proportion_class(rasterLayer, cl):
     ### Create a binary raster for the current class
     prefix = 'LC' if rasterLayer == Land_cover.split("@")[0] else 'LU'  # Adaptative prefix according to the input raster (land_cover of land_use)
     binary_raster = prefix+"_"+cl  # Set the name of the binary raster
-    gscript.run_command('r.mapcalc', expression='%s=if(%s==%s,1,0)'%(binary_raster,rasterLayer,cl),overwrite=True) # Mapcalc to create binary raster for the expected class 'cl'
-    gscript.run_command('r.null', map=binary_raster, null='0')   # Fill potential remaining null values with 0 value
+    gscript.run_command('r.mapcalc', expression='%s=if(%s==%s,1,0)'%(binary_raster,rasterLayer,cl),overwrite=True,quiet=True) # Mapcalc to create binary raster for the expected class 'cl'
+    ### Create a temporary copy of the current binary raster with all pixels values equal to 1 (to be used for computing proportion of current binary class)
+    tmplayer='tmp_%s_%s'%(binary_raster,random_string(4))
+    gscript.run_command('r.mapcalc', expression='%s=if(%s==1,1,1)'%(tmplayer,binary_raster),overwrite=True,quiet=True) # Mapcalc to create binary raster for the expected class 'cl'
+    # Fill potential remaining null values with 0 value (null values existing in the 'rasterLayer' will remain null in the binary, using r.mapcalc)
+    gscript.run_command('r.null', quiet=True, map=binary_raster, null='0') 
+    gscript.run_command('r.null', quiet=True, map=tmplayer, null='0')   
     ### Compute proportion of pixels of the current class - Administrative units
     stat_csv=os.path.join(outputdirectory_admin,"%s_%s.csv"%(prefix,cl))
     ref_map='gridded_admin_units'
-    gscript.run_command('i.segment.stats', quiet=True, overwrite=True, map=ref_map, area_measures="area", rasters=binary_raster, raster_statistics='sum', csvfile=stat_csv, separator='comma')
+    gscript.run_command('i.segment.stats', flags='s', map=ref_map, rasters='%s,%s'%(tmplayer,binary_raster), raster_statistics='sum', csvfile=stat_csv, separator='comma', quiet=True, overwrite=True)
     output_csv_1=compute_proportion_csv(stat_csv) #Create a new csv containing the proportion
     ### Compute proportion of pixels of the current class - Grids
     stat_csv=os.path.join(outputdirectory_grid,"%s_%s.csv"%(prefix,cl))
     ref_map='clumped_grid'
-    gscript.run_command('i.segment.stats', quiet=True, overwrite=True, map=ref_map, area_measures="area", rasters=binary_raster, raster_statistics='sum', csvfile=stat_csv, separator='comma')
+    gscript.run_command('i.segment.stats', flags='s', map=ref_map, rasters='%s,%s'%(tmplayer,binary_raster), raster_statistics='sum', csvfile=stat_csv, separator='comma', quiet=True, overwrite=True)
     output_csv_2=compute_proportion_csv(stat_csv) #Create a new csv containing the proportion
+    ### Remove temporary layer
+    gscript.run_command('g.remove',flags='f',type='raster',name=tmplayer) 
     # Return lists
     return (binary_raster,output_csv_1,output_csv_2)
     
-
+    
 def compute_proportion_csv(infile):
     '''
     Function used in 'proportion_class' function. It take as input the csv from i.segment.stats with the area (in number of pixels)
@@ -697,9 +686,6 @@ def main():
 
     ## Creating a raster corresponding to administratives zones - with resolution corresponding to the 'landcover' raster
     admin_boundaries(vector.split("@")[0], id)
-
-    ## Compute area of administrative zones (raster)
-    area_gridded_admin()
 
     # Data preparation : extract list of classes from the Land Cover
     if (lc_list == ""):
