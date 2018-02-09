@@ -137,6 +137,8 @@ import atexit
 import grass.script as gscript
 ## Import library for temporary files creation
 import tempfile
+## Import Shutil library
+import shutil
 ## Import Numpy library
 import numpy as np
 ## import math library
@@ -351,11 +353,10 @@ def natural_keys(text):   #Return key to be used for sorting string containing n
     return [ atoi(c) for c in re.split('(\d+)', text) ]  #Split the string
 
 
-def join_csv(indir,outfile,pattern_A,pattern_B="",pattern_C=""):
+def ordered_list_of_path(indir,pattern_A,pattern_B="",pattern_C=""):
     '''
-    Function that will join several csv files contained in a directory in a new csv. The patterns allow to use only some of the
-    csv in the directory and to keep them sorted in the joined csv. Warning: It is not a true join in the sens that there is no
-    check of concordance of primary keys betweens input file. I.segment.stat provide output with the same rank so it is not needed.
+    Function that return a list of ordered path for the files in the folder 'indir'.
+    'pattern_A', 'pattern_B', 'pattern_C'
     '''
     # Make a list of .csv files according to their filename pattern
     os.chdir(indir) # Change the current directory to the folder containing all the .csv files
@@ -371,38 +372,98 @@ def join_csv(indir,outfile,pattern_A,pattern_B="",pattern_C=""):
         csvList_C.sort(key=natural_keys) #Sort the list on a human natural order (for strings containing numericals)
         for item in csvList_C:
             csvList.append(item)
-    # Count number of row in the first csv file
-    nline=0
-    for row in open(csvList[0]):
-        nline+=1
+    return csvList
 
-    # Open all the .csv files and the output file
-    files = [open(f) for f in csvList] #Make list of open files
-    fout = open(outfile, 'w')
+            
+def join_2csv(file1,file2,separator=";",join='inner',fillempty='NULL'):
+    '''
+    Function that join two csv files according to the first column (primary key).
+    'file1' and 'file2' wait for complete path (strings) to the corresponding files. Please not that 'file1' is assume to be the left-one in the join
+    'separator' wait for the character to be considered as .csv delimiter (string)
+    'join' parameter wait either for 'left' or 'inner' according to type of join
+    'fillempty' wait for the string to be use to fill the blank when no occurance is found for the join operation
+    '''
+    import time,tempfile,csv,os
+    header_list=[]
+    file1_values_dict={}
+    file2_values_dict={}
+    reader1=csv.reader(open(file1), delimiter=separator) #Csv reader for file 1
+    reader2=csv.reader(open(file2), delimiter=separator) #Csv reader for file 2
+    # Make a list of headers
+    header_list1=[ x for x in reader1.next()]
+    header_list2=[ x for x in reader2.next()[1:]]
+    # Make a list of unique IDs from the first and second table according to type of join
+    if join=='inner':
+        id_list=[row[0] for row in reader1]
+        [id_list.append(row[0]) for row in reader2]
+        id_list=list(set(id_list))
+        id_list.sort(key=natural_keys)
+    if join=='left':
+        id_list=[row[0] for row in reader1]
+        id_list=list(set(id_list))
+        id_list.sort(key=natural_keys)
+    # Build dictionnary for values of file 1
+    reader1=csv.reader(open(file1), delimiter=separator)
+    reader1.next()
+    values_dict1={rows[0]:rows[1:] for rows in reader1}
+    # Build dictionnary for values of file 2
+    reader2=csv.reader(open(file2), delimiter=separator)
+    reader2.next()
+    values_dict2={rows[0]:rows[1:] for rows in reader2}
+    # Built new content
+    new_content=[]
+    new_header=header_list1+header_list2
+    new_content.append(new_header)
+    for key in id_list:
+        new_row=[key]
+        try:
+            [new_row.append(value) for value in values_dict1[key]]
+        except:
+            [new_row.append('%s'%fillempty) for x in header_list1[1:]]
+        try:
+            [new_row.append(value) for value in values_dict2[key]]
+        except:
+            [new_row.append('%s'%fillempty) for x in header_list2]
+        new_content.append(new_row)
+    #Return the result
+    outfile=os.path.join(tempfile.gettempdir(),"temp")
+    fout=open(outfile,"w")
+    writer=csv.writer(fout, delimiter=separator)
+    writer.writerows(new_content) #Write multiples rows in the file
+    time.sleep(0.5) # To be sure the file will not be close to fast (the content could be uncompletly filled) 
+    fout.close()
+    return outfile
 
-    # Declare a variable counting for number of warning events
-    warning_event=0
-
-    for rowid in range(nline):
-        current_row=[]
-        for f in files:
-            if f == files[0]:
-                current_row.append((f.readline().strip())) #For the first file, copy all the line
-            else:
-                second_column_item=f.readline().strip().split(",")[1]
-                if second_column_item == "":
-                    warning_event+=1
-                    print "WARNING: .csv files to be merged do not have to same number of lines"
-                else:
-                    current_row.append(second_column_item) #Strip removes trailing newline  #Copy the second column of the file if not empty
-        fout.write(",".join(current_row))
-        if rowid < nline-1:
-            fout.write("\n")  #Write a return on a new line if not at the last row)
-    time.sleep(0.5) #Sleep the process for 0.5 second to be sure the last line will be written
-    fout.close() #Close the outptufile
-
-    if warning_event>=1: #If at least one warning event happend
-        gscript.fatal("Unexpected results seem present in temporary .csv files. Please check")
+def join_multiplecsv(fileList,outfile,separator=";",join='inner', fillempty='NULL', overwrite=False):
+    '''
+    Function that apply join on multiple csv files
+    '''
+    import os, sys, shutil
+    # Stop execution if outputfile exitst and can not be overwriten
+    if os.path.isfile(outfile) and overwrite==False:
+        print "File '%s' aleady exists and overwrite option is not enabled."%outfile
+    else:
+        if os.path.isfile(outfile) and overwrite==True:  # If outputfile exitst and can be overwriten
+            os.remove(outfile)
+            #print "File '%s' will be overwrited."%outfile   # Uncomment if you want a print
+        nbfile=len(fileList)
+        if nbfile<=1: #Check if there are at least 2 files in the list
+            sys.exit("This function require at least two .csv files to be jointed together.")
+        # Copy the list of file in a queue list
+        queue_list=list(fileList)
+        # Left join on the two first files
+        file1=queue_list.pop(0)
+        file2=queue_list.pop(0)
+        tmp_file=join_2csv(file1,file2,separator=separator,join=join, fillempty=fillempty)
+        # Left join on the rest of the files in the list
+        while len(queue_list)>0:
+            file2=queue_list.pop(0)
+            tmp_file=join_2csv(tmp_file,file2,separator=separator,join=join, fillempty=fillempty)
+        #Copy the temporary file to the desired output path
+        shutil.copy2(tmp_file,outfile)
+        # Print what happend
+        #print "%s individual .csv files were joint together."%nbfile    # Uncomment if you want a print
+        
 
 def labels_from_csv(current_labels):
     '''
@@ -448,40 +509,51 @@ def RandomForest(weigthing_layer_name,vector,id):
     # -------------------------------------------------------------------------
     # Data preparation for administrative units
     # -------------------------------------------------------------------------
-    # Join to each gridded administrative unit the population, the area and all the statistics
-    gscript.run_command('db.in.ogr', quiet=True, overwrite=True, input=os.path.join(outputdirectory_admin,"area.csv"), output='area_admin') #Import the temporary .csv containing the area of the gridded administrative unit
-    gscript.run_command('db.in.ogr', quiet=True, overwrite=True, input=os.path.join(outputdirectory_admin,"all_stats.csv"), output='stat_admin') #Import the temporary .csv containing the statistics of the gridded administrative unit
-    gscript.run_command('v.db.join', quiet=True, map_=gridded_vector, column='cat', other_table='area_admin', other_column='cat_', subset_columns='area') # Join the table containing the area
-    gscript.run_command('v.db.join', quiet=True, map_=gridded_vector, column='cat', other_table='stat_admin', other_column='cat_') # Join the table containing the statistics
-    # Compute the log of population density
-    gscript.run_command('v.db.addcolumn', quiet=True, map_=gridded_vector, column= "log_population_density double precision")  #add a new column which will contain the log of density
-    admin_attribute_table=os.path.join(outputdirectory_admin,"admin_attribute.csv") # Define the path to the .csv
-    gscript.run_command('db.out.ogr', quiet=True, overwrite=True, input=gridded_vector, output=admin_attribute_table , format='CSV') #Export the attribute table in .csv
-    attr_table = pd.read_csv(admin_attribute_table) #reading the csv file as dataframe
-    # Filling the log population density column
-    log = attr_table['log_population_density']
-    pop = attr_table[population]
-    admin_area = attr_table['area']
-    for i in range(len(log.values)):
-        log.values[i]=ma.log(pop.values[i]/(admin_area.values[i]*(float(tile_size)**2)))  #Compute the log (ln) of the population density
-    attr_table.to_csv(path_or_buf=admin_attribute_table, index=False) #export the dataframe to the csv
-
+    # Compute area of the gridded administrative unit (vector) layer (+add column)
+    gscript.run_command('v.db.addcolumn', map=gridded_vector, columns="area double precision")
+    gscript.run_command('v.to.db', map=gridded_vector, option='area', columns='area', units='meters')
+    # Export desired columns from the attribute table as CSV
+    tmp_table=os.path.join(outputdirectory_admin,"tmp_%s.csv"%random_string(4)) # Define the path to the .csv
+    query="SELECT cat,%s,area FROM %s"%(population,gridded_vector)
+    gscript.run_command('db.select', sql=query, output=tmp_table)
+    TMP_CSV.append(tmp_table)
+    # Compute log of density in a new .csv file
+    reader=csv.reader(open(tmp_table,'r'), delimiter='|')
+    log_density_csv=os.path.join(outputdirectory_admin,"log_pop_density.csv") # Define the path to the .csv containing the log of density
+    fout=open(log_density_csv,'w')
+    writer=csv.writer(fout, delimiter=',')
+    new_content=[]
+    new_header=['cat','log_population_density']
+    new_content.append(new_header)
+    reader.next() # Pass the header
+    [new_content.append([row[0],ma.log(int(row[1])/float(row[2]))]) for row in reader]  # Compute log (ln) of the density
+    writer.writerows(new_content)
+    time.sleep(0.5) # To be sure the file will not be close to fast (the content could be uncompletly filled) 
+    fout.close()
+    # Define the path to the file with all co-variates 
+    all_stats_grid=os.path.join(outputdirectory_grid,"all_stats.csv") # for grid level
+    all_stats_admin=os.path.join(outputdirectory_admin,"all_stats.csv") # for admin level
+    # For admin level : join all co-variates with the log of density (response variable of the model) 
+    tmp_file=join_2csv(log_density_csv,all_stats_admin,separator=",",join='inner',fillempty='NULL')        
+    admin_attribute_table=os.path.join(outputdirectory_admin,"admin_attribute_table.csv")
+    shutil.copy2(tmp_file,admin_attribute_table) # Copy the file from temp folder to admin folder
+    TMP_CSV.append(tmp_file)
+    
     # -------------------------------------------------------------------------
     # Creating RF model
     # -------------------------------------------------------------------------
-    df_admin = pd.read_csv(admin_attribute_table)
-    csv_table_grid=os.path.join(outputdirectory_grid,"all_stats.csv")
-    df_grid = pd.read_csv(csv_table_grid)
+    df_admin = pd.read_csv(admin_attribute_table) #reading the csv file as dataframe
+    df_grid = pd.read_csv(all_stats_grid)
 
     ## Changing null values to zero
     # for df_grid
-    features = df_grid.columns[:]
-    for i in features:
-        df_grid[i].fillna(0, inplace=True)
+    #features = df_grid.columns[:]
+    #for i in features:
+    #    df_grid[i].fillna(0, inplace=True)
     # for df_admin
-    features = df_admin.columns[:]
-    for i in features:
-        df_admin[i].fillna(0, inplace=True)
+    #features = df_admin.columns[:]
+    #for i in features:
+    #    df_admin[i].fillna(0, inplace=True)
 
     ## Make a list with name of covariables columns
     list_covar=[]
@@ -499,8 +571,8 @@ def RandomForest(weigthing_layer_name,vector,id):
     ## Saving covariable for prediction (independent variables)
     x=df_admin[list_covar]  #Get a dataframe with independent variables for administratives units
     x_grid=df_grid[list_covar] #Get a dataframe with independent variables for grids
-    #x.to_csv(path_or_buf=os.path.join(outputdirectory_admin,"covar_x.csv"), index=False) #Export in .csv for archive
-    #x_grid.to_csv(path_or_buf=os.path.join(outputdirectory_grid,"covar_x_grid.csv"), index=False) #Export in .csv for archive
+    x.to_csv(path_or_buf=os.path.join(outputdirectory_admin,"covar_x.csv"), index=False) #Export in .csv for archive
+    x_grid.to_csv(path_or_buf=os.path.join(outputdirectory_grid,"covar_x_grid.csv"), index=False) #Export in .csv for archive
 
     # Train the random forest regression model on administratives zones
     regressor = RandomForestRegressor(n_estimators = 200, oob_score = True)
@@ -734,7 +806,7 @@ def main():
         [TMP_CSV.append(x) for x in temp_csvlist_1]  # Append the paths to .csv files to the list of temporary .csv
         [TMP_CSV.append(x) for x in temp_csvlist_2]  # Append the paths to .csv files to the list of temporary .csv
 
-    ## adding distance to places of interest data to the attribute table of the gridded vector and calculate its mean for each administrative unit
+    ## Compute mean distance to places of interest
     if(distance_to !=''):
         # For grids
         grid_stat_output=os.path.join(outputdirectory_grid,"mean_dist.csv")
@@ -757,7 +829,8 @@ def main():
             pattern_B="LU_*_prop.csv"  #Add all csv with proportions of Land use classes
         if distance_to !='':
             pattern_C="mean_*.csv"     #Add mean distance to amenity if the option was used
-        join_csv(directory,allstatfile,pattern_A,pattern_B,pattern_C)
+        list_paths=ordered_list_of_path(directory,pattern_A,pattern_B,pattern_C)  #Get ordered list of path
+        join_multiplecsv(list_paths,allstatfile,separator=",",join='inner', fillempty='NULL', overwrite=True)
 
     ## Random Forest
     RandomForest(output_weighting_layer,vector.split("@")[0],id)
