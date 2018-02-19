@@ -1,6 +1,6 @@
 <h2>DESCRIPTION</h2>
 
-<em>r.population.density</em> creates a weighting layer to be used for redistribution of population count known at some administrative unit level into a raster grid with a finest spatial resolution <em><a href="https://en.wikipedia.org/wiki/Dasymetric_map">(dasymetric mapping)</a></em>. Once the weighting layer has been created using the current add-on, the dasymetric mapping can be perfomed using the <a href="https://grass.osgeo.org/grass72/manuals/addons/v.area.weigh.html">v.area.weigh</a> module. <em>r.population.density</em> also creates a 'gridded' version of the administratives units, whose borders will appear as staircases following the spatial resolution of the weighting layer produced.
+<em>r.population.density</em> creates a weighting layer to be used for redistribution of population count known at some administrative unit level into a raster grid with a finer spatial resolution <em><a href="https://en.wikipedia.org/wiki/Dasymetric_map">(dasymetric mapping)</a></em>. Once the weighting layer has been created using the current add-on, the dasymetric mapping can be performed using the <a href="https://grass.osgeo.org/grass72/manuals/addons/v.area.weigh.html">v.area.weigh</a> module. <em>r.population.density</em> also creates a 'gridded' version of the administrative units, whose borders will appear as staircases following the spatial resolution of the weighting layer produced, which can be used in v.area.weigh.
 
 <p>The add-on trains a Random Forest (regression) model at the level of administrative units and predict a weight in a raster grid. The spatial resolution of this raster should be specified via the <b>tile_size</b> parameter, and its name via the <b>output</b> parameter.
 
@@ -10,9 +10,9 @@
 
 <p>It is possible not to use all the classes from the land cover map or from the optional raster. For that purpose, a list of classes to be used should be specified via the <b>lc_list</b> parameter (for land cover map) or the <b>lu_list</b> parameter (for a land use additional map).
 
-<p>The <em><a href="https://en.wikipedia.org/wiki/Out-of-bag_error">out-of-bag error</a></em> (OOB) of the model is printed in the console and give an indication about the internal accuracy of the model (cross-validation on training set at the administrative units level). The log of the Random Forest run (including the OOB error) can optionally be save in a file whose name have to be specified via the <b>log_file</b> parameter.
+<p>The <em><a href="https://en.wikipedia.org/wiki/Out-of-bag_error">out-of-bag error</a></em> (OOB) of the model is printed in the console and give an indication about the internal accuracy of the model (cross-validation on training set at the administrative units level). The log of the Random Forest run (including the OOB error) can optionally be saved in a file whose name has to be specified via the <b>log_file</b> parameter.
 
-<p>Feature importances in the model are ploted in a graph, whose name have to be specified via the <b>plot</b> parameter. In option, a table with correspondances between rasters categories and classes name could be provided in a .csv file using <b>lc_class_name</b> and the <b>lu_class_name</b> parameters. The file cannot have any special character and have to be formatted as follows:
+<p>Feature importances in the model are plotted in a graph, whose name has to be specified via the <b>plot</b> parameter. In option, a table with correspondences between rasters categories and classes name could be provided in a .csv file using <b>lc_class_name</b> and the <b>lu_class_name</b> parameters. The file cannot have any special character and have to be formatted as follows:
 <div class="code"><pre>
 1|Continuous urban fabric
 2|Discontinuous urban fabric
@@ -29,11 +29,11 @@
 
 <h2>NOTES</h2>
 
-<p>As the model is trained to predict the napierian logarithm of the response variable, it is mandatory to not have zero or negative values in the column containing the response variable. It is also expected that the response variable column does not contain <em>NULL</em> values. For the same reason, the model is unable to predict a zero weight value. The implementation of the add-on is designed so that if a predicted weight is smaller than 0.0000000001 obs./m² the value in the weighting layer will be set to 0. Optionaly, It is possible to force weighting layer's grids with a value of zero if a specific class (specified via the <b>built_up_category</b> parameter) is absent from those grids.
+<p>As the model is trained to predict the napierian logarithm of the response variable, it is mandatory to not have zero or negative values in the column containing the response variable. It is also expected that the response variable column does not contain <em>NULL</em> values. For the same reason, the model is unable to predict a zero weight value. The implementation of the add-on is designed so that if a predicted weight is smaller than 0.0000000001 obs./m² the value in the weighting layer will be set to 0. Optionally, It is possible to force weighting layer's grids with a value of zero if a specific class (specified via the <b>built_up_category</b> parameter) is absent from those grids.
 
-<p>The covariates whose the feature importance is less than 0.5% are, by default, removed from the final model. The <b>-f</b> flag can be used to force to keep all the covariates in the final model.
+<p>The covariates whose feature importance is less than 0.5% are, by default, removed from the final model. The <b>-f</b> flag can be used to force to keep all the covariates in the final model.
 
-<p>The parameters of the Random Forest model are tuned using grid search and cross-validation (kfold=5). Optionally, you can provide a Python dictionary with the parameter to be tested via the <b>param_grid</b> parameter. For information about the parameter to be used, please refer to the <em><a href="http://scikit-learn.org/stable/modules/generated/sklearn.ensemble.RandomForestRegressor.html">scikit-learn manual</a></em>. Here is an example with the set of parameter to be tested by default :
+<p>The parameters of the Random Forest model are tuned using grid search and cross-validation (kfold=5). Optionally, you can provide a Python dictionary with the parameter to be tested via the <b>param_grid</b> parameter. For information about the parameter to be used, please refer to the <em><a href="http://scikit-learn.org/stable/modules/generated/sklearn.ensemble.RandomForestRegressor.html">scikit-learn manual</a></em>. Here is an example of the set of parameters to be tested by default :
 
 <p><div class="code"><pre>
 "{'bootstrap':[True],'max_features':['sqrt',0.6,0.7],'n_estimators':[300, 400, 500],'min_samples_split':[2,3,4,5,6]}"
@@ -45,7 +45,7 @@
 <em>r.population.density</em> requires the <a href="https://grass.osgeo.org/grass72/manuals/addons/i.segment.stats.html">i.segment.stats addon</a> and 
 <a href="https://grass.osgeo.org/grass72/manuals/addons/r.object.geometry.html">r.object.geometry addon</a> to be installed. This can be done using <a href="https://grass.osgeo.org/grass72/manuals/g.extension.html">g.extension</a>. 
 <p> 
-<em>r.population.density</em> uses the "scikit-learn" machine learning package along with the "pandas" python package. These packages need to be installed within your GRASS GIS Python environment for <em>r.population.density</em> to work. For Linux users, this package should be available through the linux package manager in most distributions (named for example "python-scikit-learn"). For MS-Windows users using a 64 bit GRASS, the easiest way is to use the <a href="https://grass.osgeo.org/download/software/ms-windows/">OSGeo4W</a> installation method of GRASS, where the python setuptools can also be installed. You can then use 'easy_install pip' to install the pip package manager. Then, you can download the "Python wheels" corresponding to each package and install them using the following command : <em>pip install packagename.whl</em>. Bellow, links for downloading wheels are provided. If GRASS was not installed using the OSGeo4W method, the pip package manager can be installed by saving the "get-pip.py" pyhton script provided <a href="https://bootstrap.pypa.io/get-pip.py">here</a> in the folder containing the GRASS GIS Python environment (GRASSFOLDER/../etc/python/grass) and executing it with administrator rights with the followin command : <em>Python get-pip.py</em> 
+<em>r.population.density</em> uses the "scikit-learn" machine learning package along with the "pandas" Python package. These packages need to be installed within your GRASS GIS Python environment for <em>r.population.density</em> to work. For Linux users, this package should be available through the Linux package manager in most distributions (named for example "python-scikit-learn"). For MS-Windows users using a 64 bit GRASS, the easiest way is to use the <a href="https://grass.osgeo.org/download/software/ms-windows/">OSGeo4W</a> installation method of GRASS, where the Python setuptools can also be installed. You can then use 'easy_install pip' to install the pip package manager. Then, you can download the "Python wheels" corresponding to each package and install them using the following command : <em>pip install packagename.whl</em>. Bellow, links for downloading wheels are provided. If GRASS was not installed using the OSGeo4W method, the pip package manager can be installed by saving the "get-pip.py" pyhton script provided <a href="https://bootstrap.pypa.io/get-pip.py">here</a> in the folder containing the GRASS GIS Python environment (GRASSFOLDER/../etc/python/grass) and executing it with administrator rights with the following command : <em>Python get-pip.py</em> 
 
 <p>Pandas Wheel : <a href="https://pypi.python.org/pypi/pandas">https://pypi.python.org/pypi/pandas</a>
 <p>Scikit-learn Wheel : <a href="https://pypi.python.org/pypi/scikit-learn/0.18.2">https://pypi.python.org/pypi/scikit-learn/0.18.2</a>
@@ -65,7 +65,7 @@ r.population.density.py vector=admin_level_4 land_cover=my_landcover_map landu_u
 # Generate a weighting layer using land cover map and land use map, providing the classes' names for feature importance plot
 r.population.density.py vector=admin_level_4 land_cover=my_landcover_map landu_use=my_landuse_map distance_to=distance_to_school tile_size=100 id=CAT population=pop_tot output=weighting_raster_100m plot=/home/user/importance_plot lc_class_name=/home/user/landcover_legend.csv lc_class_name=/home/user/landuse_legend.csv n_jobs=4
 
-# Generate a weighting layer using land cover map and land use map, with option for saving the log file
+# Generate a weighting layer using land cover map and land use map, with options for saving the log file
 r.population.density.py vector=admin_level_4 land_cover=my_landcover_map landu_use=my_landuse_map distance_to=distance_to_school tile_size=100 id=CAT population=pop_tot output=weighting_raster_100m plot=/home/user/importance_plot log_file=/home/user/rf_run_log n_jobs=4
 
 # Generate a weighting layer using land cover map, land use map and distance to nearest school
@@ -91,7 +91,7 @@ r.population.density.py vector=admin_level_4 land_cover=my_landcover_map landu_u
 </center>
 
 <h2>TODO</h2>
-Reduce the dependencies of the add-on regarding the Python libs Pandas and Joblib.
+Reduce the dependencies of the add-on regarding the Pandas library.
 
 <h2>REFERENCES</h2>
 
@@ -112,7 +112,7 @@ This work was funded by the Belgian Federal Science Policy Office (BELSPO) (Rese
 	
 <h2>AUTHOR</h2>
 	
-	Safa FENNIA, Tais GRIPPA - Universite Libre de Bruxelles. ANAGEO Lab.
+	Tais GRIPPA, Safa FENNIA - Universite Libre de Bruxelles. ANAGEO Lab.
 </body>
 </html>
 
