@@ -24,25 +24,34 @@
 8|Dump sites
 </pre></div>
 
-<p>The add-on support parallel processing. The number of cores to be used should be specified via the <b>n_jobs</b> parameter. 
+<p>The add-on support parallel processing. The number of cores to be used should be specified via the <b>n_jobs</b> parameter.  
 
 
 <h2>NOTES</h2>
 
-<p>As the model is trained to predict the napierian logarithm of the response variable, it is mandatory to not have zero or negative values in the column containing the response variable. It is also expected that the response variable column does not contain <em>NULL</em> values. For the same reason, the model is unable to predict a zero weight value. The implementation of the add-on is designed so that if a predicted weight is smaller than 0.0000000001 obs./m² the value in the weighting layer will be set to 0. It is possible to force weighting layer's grids with a value of zero if a specific class (specified via the <b>built_up_category</b> parameter) is absent in those grids.
+<p>As the model is trained to predict the napierian logarithm of the response variable, it is mandatory to not have zero or negative values in the column containing the response variable. It is also expected that the response variable column does not contain <em>NULL</em> values. For the same reason, the model is unable to predict a zero weight value. The implementation of the add-on is designed so that if a predicted weight is smaller than 0.0000000001 obs./m² the value in the weighting layer will be set to 0. Optionaly, It is possible to force weighting layer's grids with a value of zero if a specific class (specified via the <b>built_up_category</b> parameter) is absent from those grids.
+
+<p>The covariates whose the feature importance is less than 0.5% are, by default, removed from the final model. The <b>-f</b> flag can be used to force to keep all the covariates in the final model.
+
+<p>The parameters of the Random Forest model are tuned using grid search and cross-validation (kfold=5). Optionally, you can provide a Python dictionary with the parameter to be tested via the <b>param_grid</b> parameter. For information about the parameter to be used, please refer to the <em><a href="http://scikit-learn.org/stable/modules/generated/sklearn.ensemble.RandomForestRegressor.html">scikit-learn manual</a></em>. Here is an example with the set of parameter to be tested by default :
+
+<p><div class="code"><pre>
+"{'bootstrap':[True],'max_features':['sqrt',0.6,0.7],'n_estimators':[300, 400, 500],'min_samples_split':[2,3,4,5,6]}"
+</pre></div>
+
+
 
 <h2>DEPENDENCIES</h2>
 <em>r.population.density</em> requires the <a href="https://grass.osgeo.org/grass72/manuals/addons/i.segment.stats.html">i.segment.stats addon</a> and 
 <a href="https://grass.osgeo.org/grass72/manuals/addons/r.object.geometry.html">r.object.geometry addon</a> to be installed. This can be done using <a href="https://grass.osgeo.org/grass72/manuals/g.extension.html">g.extension</a>. 
 <p> 
-<em>r.population.density</em> uses the "scikit-learn" machine learning package along with the "pandas" and "joblib" python package. These packages need to be installed within your GRASS GIS Python environment for <em>r.population.density</em> to work. For Linux users, this package should be available through the linux package manager in most distributions (named for example "python-scikit-learn"). For MS-Windows users using a 64 bit GRASS, the easiest way is to use the <a href="https://grass.osgeo.org/download/software/ms-windows/">OSGeo4W</a> installation method of GRASS, where the python setuptools can also be installed. You can then use 'easy_install pip' to install the pip package manager. Then, you can download the "Python wheels" corresponding to each package and install them using the following command : <em>pip install packagename.whl</em>. Bellow, links for downloading wheels are provided. If GRASS was not installed using the OSGeo4W method, the pip package manager can be installed by saving the "get-pip.py" pyhton script provided <a href="https://bootstrap.pypa.io/get-pip.py">here</a> in the folder containing the GRASS GIS Python environment (GRASSFOLDER/../etc/python/grass) and executing it with administrator rights with the followin command : <em>Python get-pip.py</em> 
+<em>r.population.density</em> uses the "scikit-learn" machine learning package along with the "pandas" python package. These packages need to be installed within your GRASS GIS Python environment for <em>r.population.density</em> to work. For Linux users, this package should be available through the linux package manager in most distributions (named for example "python-scikit-learn"). For MS-Windows users using a 64 bit GRASS, the easiest way is to use the <a href="https://grass.osgeo.org/download/software/ms-windows/">OSGeo4W</a> installation method of GRASS, where the python setuptools can also be installed. You can then use 'easy_install pip' to install the pip package manager. Then, you can download the "Python wheels" corresponding to each package and install them using the following command : <em>pip install packagename.whl</em>. Bellow, links for downloading wheels are provided. If GRASS was not installed using the OSGeo4W method, the pip package manager can be installed by saving the "get-pip.py" pyhton script provided <a href="https://bootstrap.pypa.io/get-pip.py">here</a> in the folder containing the GRASS GIS Python environment (GRASSFOLDER/../etc/python/grass) and executing it with administrator rights with the followin command : <em>Python get-pip.py</em> 
 
 <p>Pandas Wheel : <a href="https://pypi.python.org/pypi/pandas">https://pypi.python.org/pypi/pandas</a>
 <p>Scikit-learn Wheel : <a href="https://pypi.python.org/pypi/scikit-learn/0.18.2">https://pypi.python.org/pypi/scikit-learn/0.18.2</a>
-<p>Joblib Wheel : <a href="https://pypi.python.org/pypi/joblib">https://pypi.python.org/pypi/joblib</a>
 
 <h3>Known problems</h3>
-On Windows, the installation of joblib and Pandas libraries could be very difficult to handle. 
+On Windows, the installation of Pandas library could be quite difficult to handle. 
 
 <h2>EXAMPLE</h2>
 

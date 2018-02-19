@@ -4,11 +4,11 @@
 #*
 #* MODULE:     r.population.density
 #*
-#* AUTHOR(S):  Safa Fennia, Grippa Tais
+#* AUTHOR(S):  Grippa Tais, Safa Fennia
 #*
 #* PURPOSE:    Create a weighting layer for dasymetric mapping, using a random forest regression model
 #*
-#* COPYRIGHT:  (C) 2017 Safa Fennia, Grippa Tais
+#* COPYRIGHT:  (C) 2017 Grippa Tais, Safa Fennia
 #*             ANAGEO, Université libre de Bruxelles, Belgique
 #*
 #*
@@ -123,8 +123,23 @@
 #% description: Number of cores to be used for the parallel process
 #% required : yes
 #%end
+#%flag
+#% key: a
+#% description: Keep all covariates in the final model
+#% guisection: Feature selection and tuning
+#%end
+#%option
+#% key: param_grid
+#% type: string
+#% description: Python dictionary of customized tunegrid for sklearn RFregressor
+#% required: no
+#% guisection: Feature selection and tuning
+#%end
 #%rules
+#% required: land_cover, land_use
+#% requires: lc_list, land_cover
 #% requires: lu_list, land_use
+#% requires: lc_class_name, land_cover
 #% requires: lu_class_name, land_use
 #%end
 
@@ -151,10 +166,12 @@ import matplotlib.pyplot as plt
 import multiprocessing
 from multiprocessing import Pool
 from functools import partial 
+# import literal_eval
+from ast import literal_eval
 
 ## Import Pandas library (View and manipulaiton of tables)
 try:
-    import pandas as pd  #TODO: remove dependency to Pandas
+    import pandas as pd  #TODO: remove dependency to Pandas (still requiered for selecting in dataframes based on column names)
 except:
     gscript.fatal("Pandas is not installed ")
 
@@ -577,7 +594,6 @@ def RandomForest(weigthing_layer_name,vector,id):
     #x.to_csv(path_or_buf=os.path.join(outputdirectory_admin,"covar_x.csv"), index=False) #Export in .csv for archive
 
     # Remove features whose importance is less than a threshold (Feature selection)
-    min_fimportance=0.01                                                                                            #### TODO: Should be a parameter of the module
     rfmodel=RandomForestRegressor(n_estimators = 500, oob_score = True, max_features='auto', n_jobs=-1)
     a=SelectFromModel(rfmodel, threshold=min_fimportance)
     fited=a.fit(x, y)
@@ -586,11 +602,6 @@ def RandomForest(weigthing_layer_name,vector,id):
     x=fited.transform(x)  # Replace the dataframe with the selected features
 
     #### Tuning of hyperparameters for the Random Forest regressor using "Grid search"
-    param_grid = {
-        'oob_score': [True],
-        'bootstrap': [True],
-        'max_features': ['sqrt',0.1,0.2,0.3,0.4,0.5,0.6,0.7],
-        'n_estimators': [50, 100, 200, 300, 400, 500, 650, 800, 1000]}
     # Instantiate the grid search model
     grid_search = GridSearchCV(estimator=RandomForestRegressor(), param_grid=param_grid, cv=5, n_jobs=n_jobs, verbose=0)
     grid_search.fit(x, y)   # Fit the grid search to the data
@@ -676,7 +687,7 @@ def RandomForest(weigthing_layer_name,vector,id):
     print message
 
 def main():
-    global TMP_MAPS, TMP_CSV, vector, gridded_vector, Land_cover, Land_use, distance_to, tile_size, n_jobs, id, population, built_up, output, plot, log_file, log_text, nsres, ewres, lc_classes_list, lu_classes_list, lc_class_name, lu_class_name
+    global TMP_MAPS, TMP_CSV, vector, min_fimportance, param_grid, gridded_vector, Land_cover, Land_use, distance_to, tile_size, n_jobs, id, population, built_up, output, plot, log_file, log_text, nsres, ewres, lc_classes_list, lu_classes_list, lc_class_name, lu_class_name
     TMP_MAPS = []
     TMP_CSV = []
     start_time=time.ctime()
@@ -698,6 +709,15 @@ def main():
     lc_class_name = options['lc_class_name'] if options['lc_class_name'] else ""
     lu_class_name = options['lu_class_name'] if options['lu_class_name'] else ""
     distance_to = options['distance_to'] if options['distance_to'] else ""
+    min_fimportance = 0.00 if flags['a'] else 0.005   # Default value = 0.01 meaning covariates with less than 1% of importance will be removed. If flag active, then all covariates will be kept
+    if options['param_grid']:
+        try:
+            literal_eval(options['param_grid'])
+        except:
+            gscript.fatal(_("The syntax of the Python dictionary with model parameter is not as expected. Please refer to the manual"))
+    param_grid = literal_eval(options['param_grid']) if options['param_grid'] else {'oob_score': [True],'bootstrap': [True],
+                                                                                    'max_features': ['sqrt',0.1,0.2,0.3,0.4,0.5,0.6,0.7],
+                                                                                    'n_estimators': [50, 100, 200, 300, 400, 500, 650, 800, 1000]}
     n_jobs = int(options['n_jobs'])
 
     # vector exists?
@@ -763,6 +783,12 @@ def main():
         if os.path.isfile(lu_class_name) is False :
             gscript.fatal(_("Csv file containing class names for <%s> doesn't exists") % Land_use)
 
+    # Check if 'oob_score' parameter in the dictionnary for grid search is well True
+    if 'oob_score' not in param_grid.keys():
+        param_grid['oob_score']=[True]
+    elif param_grid['oob_score']!=[True]:
+        param_grid['oob_score']=[True]
+   
     # valid n_jobs?
     if(n_jobs >= multiprocessing.cpu_count()):
         gscript.fatal(_("Requested number of jobs is > or = to available ressources. Try to reduce to at maximum <%s> jobs")%(int(multiprocessing.cpu_count())-1))
