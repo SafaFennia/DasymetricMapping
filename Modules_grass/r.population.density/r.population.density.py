@@ -158,11 +158,14 @@ try:
 except:
     gscript.fatal("Pandas is not installed ")
 
-## Import Random Forest library
+## Import sklearn libraries
 try:
     from sklearn.ensemble import RandomForestRegressor
+    from sklearn.feature_selection import SelectFromModel
+    from sklearn.model_selection import GridSearchCV
 except:
     gscript.fatal("Scikit learn 0.18 or newer is not installed")
+
 
 def cleanup():
     gscript.run_command('g.remove', quiet=True, type='raster', name=','.join(TMP_MAPS), flags='fb')
@@ -506,6 +509,7 @@ def RandomForest(weigthing_layer_name,vector,id):
     covariates are proportion of each Land Cover's class (opt: with proportion of each land use's class)
     '''
     global log_text
+    global n_jobs
     # -------------------------------------------------------------------------
     # Data preparation for administrative units
     # -------------------------------------------------------------------------
@@ -570,15 +574,34 @@ def RandomForest(weigthing_layer_name,vector,id):
 
     ## Saving covariable for prediction (independent variables)
     x=df_admin[list_covar]  #Get a dataframe with independent variables for administratives units
-    x_grid=df_grid[list_covar] #Get a dataframe with independent variables for grids
-    x.to_csv(path_or_buf=os.path.join(outputdirectory_admin,"covar_x.csv"), index=False) #Export in .csv for archive
-    x_grid.to_csv(path_or_buf=os.path.join(outputdirectory_grid,"covar_x_grid.csv"), index=False) #Export in .csv for archive
+    #x.to_csv(path_or_buf=os.path.join(outputdirectory_admin,"covar_x.csv"), index=False) #Export in .csv for archive
 
-    # Train the random forest regression model on administratives zones
-    regressor = RandomForestRegressor(n_estimators = 200, oob_score = True)
-    regressor.fit(x, y)
+    # Remove features whose importance is less than a threshold (Feature selection)
+    min_fimportance=0.01                                                                                            #### TODO: Should be a parameter of the module
+    rfmodel=RandomForestRegressor(n_estimators = 500, oob_score = True, max_features='auto', n_jobs=-1)
+    a=SelectFromModel(rfmodel, threshold=min_fimportance)
+    fited=a.fit(x, y)
+    feature_idx = fited.get_support()   # Get list of True/False values according to the fact the OOB score of the covariate is upper the threshold 
+    list_covar = list(x.columns[feature_idx])  # Update list of covariates with the selected features 
+    x=fited.transform(x)  # Replace the dataframe with the selected features
+
+    #### Tuning of hyperparameters for the Random Forest regressor using "Grid search"
+    param_grid = {
+        'oob_score': [True],
+        'bootstrap': [True],
+        'max_features': ['sqrt',0.1,0.2,0.3,0.4,0.5,0.6,0.7],
+        'n_estimators': [50, 100, 200, 300, 400, 500, 650, 800, 1000]}
+    # Instantiate the grid search model
+    grid_search = GridSearchCV(estimator=RandomForestRegressor(), param_grid=param_grid, cv=5, n_jobs=n_jobs, verbose=0)
+    grid_search.fit(x, y)   # Fit the grid search to the data
+    grid_search.best_params_    # Get the best parameters
+    regressor = grid_search.best_estimator_  # Save the best regressor
+    regressor.fit(x, y) # Fit the best regressor with the data
+    
     # Predict on grids
-    prediction = regressor.predict(x_grid)
+    x_grid=df_grid[list_covar] #Get a dataframe with independent variables for grids (remaining after feature selection)
+    #x_grid.to_csv(path_or_buf=os.path.join(outputdirectory_grid,"covar_x_grid.csv"), index=False) #Export in .csv for archive
+    prediction = regressor.predict(x_grid)  # Apply the model on grid values
 
     # Save the prediction
     df1 = df_grid['cat']
@@ -653,7 +676,7 @@ def RandomForest(weigthing_layer_name,vector,id):
     print message
 
 def main():
-    global TMP_MAPS, TMP_CSV, vector, gridded_vector, Land_cover, Land_use, distance_to, tile_size, id, population, built_up, output, plot, log_file, log_text, nsres, ewres, lc_classes_list, lu_classes_list, lc_class_name, lu_class_name
+    global TMP_MAPS, TMP_CSV, vector, gridded_vector, Land_cover, Land_use, distance_to, tile_size, n_jobs, id, population, built_up, output, plot, log_file, log_text, nsres, ewres, lc_classes_list, lu_classes_list, lc_class_name, lu_class_name
     TMP_MAPS = []
     TMP_CSV = []
     start_time=time.ctime()
@@ -741,8 +764,8 @@ def main():
             gscript.fatal(_("Csv file containing class names for <%s> doesn't exists") % Land_use)
 
     # valid n_jobs?
-    if(n_jobs > multiprocessing.cpu_count()):
-        gscript.fatal(_("Invalid n_jobs <%s>") % n_jobs)
+    if(n_jobs >= multiprocessing.cpu_count()):
+        gscript.fatal(_("Requested number of jobs is > or = to available ressources. Try to reduce to at maximum <%s> jobs")%(int(multiprocessing.cpu_count())-1))
 
     # Check if i.segment.stats is well installed
     if not gscript.find_program('i.segment.stats', '--help'):
