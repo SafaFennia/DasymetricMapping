@@ -254,7 +254,7 @@ def admin_boundaries(vector, id):
     gscript.run_command('v.to.rast', quiet=True, input=vector, type='area', output='gridded_admin_units', use='attr', attribute_column=id, overwrite=True)
     gscript.run_command('r.to.vect', quiet=True, input='gridded_admin_units', output=gridded_vector, type='area', column=id, flags='v',overwrite=True)
     temp_name=random_string(15)
-    gscript.run_command('g.copy', vector='%s,%s'%(vector,temp_name))
+    gscript.run_command('g.copy', quiet=True, vector='%s,%s'%(vector,temp_name))
     gscript.run_command('v.db.join', map_=gridded_vector, column='cat', other_table=temp_name, other_column=id, subset_columns=population) #join the population count
     gscript.run_command('g.remove', quiet=True, flags='f', type='vector', name=temp_name+'@'+current_mapset)
     TMP_MAPS.append("gridded_admin_units")
@@ -539,7 +539,7 @@ def RandomForest(weigthing_layer_name,vector,id):
     gscript.run_command('v.to.db', map=gridded_vector, option='area', columns='area', units='meters')
     # Export desired columns from the attribute table as CSV
     tmp_table=os.path.join(outputdirectory_admin,"tmp_%s.csv"%random_string(4)) # Define the path to the .csv
-    query="SELECT cat,%s,area FROM %s"%(population,gridded_vector)
+    query="SELECT cat,%s,area FROM %s"%(population,gridded_vector.split('@')[0])
     gscript.run_command('db.select', sql=query, output=tmp_table)
     TMP_CSV.append(tmp_table)
     # Compute log of density in a new .csv file
