@@ -252,7 +252,10 @@ def admin_boundaries(vector, id):
     gscript.run_command('g.region', raster='clumped_grid')
     gscript.run_command('v.to.rast', quiet=True, input=vector, type='area', output='gridded_admin_units', use='attr', attribute_column=id, overwrite=True)
     gscript.run_command('r.to.vect', quiet=True, input='gridded_admin_units', output=gridded_vector, type='area', column=id, flags='v',overwrite=True)
-    gscript.run_command('v.db.join', map_=gridded_vector, column='cat', other_table=vector, other_column=id, subset_columns=population) #join the population count
+    temp_name=random_string(15)+gscript.gisenv()['MAPSET']
+    gscript.run_command('g.copy', vector='%s,%s'%(vector,temp_name))
+    gscript.run_command('v.db.join', map_=gridded_vector, column='cat', other_table=temp_name, other_column=id, subset_columns=population) #join the population count
+    gscript.run_command('g.remove', flags='f', type='vector', name=temp_name)
     TMP_MAPS.append("gridded_admin_units")
     check_no_missing_zones(vector,gridded_vector)
     
