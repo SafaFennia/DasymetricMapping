@@ -150,8 +150,6 @@ import csv
 import atexit
 ## Import GRASS GIS Python Scripting Library
 import grass.script as gscript
-## Import library for temporary files creation
-import tempfile
 ## Import Shutil library
 import shutil
 ## Import Numpy library
@@ -196,12 +194,13 @@ def create_tempdirs():
     '''
     # Temporary directory for administrative units statistics
     global outputdirectory_admin
-    outputdirectory_admin=os.path.join(tempfile.gettempdir(),"admin_level")
+    tmp_grass_dir=gscript.tempdir()
+    outputdirectory_admin=os.path.join(tmp_grass_dir,"admin_level")
     if not os.path.exists(outputdirectory_admin):
         os.makedirs(outputdirectory_admin)
     # Temporary directory for grids statistics
     global outputdirectory_grid
-    outputdirectory_grid=os.path.join(tempfile.gettempdir(),"grid_level")
+    outputdirectory_grid=os.path.join(tmp_grass_dir,"grid_level")
     if not os.path.exists(outputdirectory_grid):
         os.makedirs(outputdirectory_grid)
 
@@ -255,7 +254,7 @@ def admin_boundaries(vector, id):
     gscript.run_command('r.to.vect', quiet=True, input='gridded_admin_units', output=gridded_vector, type='area', column=id, flags='v',overwrite=True)
     temp_name=random_string(15)
     gscript.run_command('g.copy', quiet=True, vector='%s,%s'%(vector,temp_name))
-    gscript.run_command('v.db.join', map_=gridded_vector, column='cat', other_table=temp_name, other_column=id, subset_columns=population) #join the population count
+    gscript.run_command('v.db.join', quiet=True, map_=gridded_vector, column='cat', other_table=temp_name, other_column=id, subset_columns=population) #join the population count
     gscript.run_command('g.remove', quiet=True, flags='f', type='vector', name=temp_name+'@'+current_mapset)
     TMP_MAPS.append("gridded_admin_units")
     check_no_missing_zones(vector,gridded_vector)
@@ -267,10 +266,10 @@ def create_clumped_grid(tile_size):
     also be used at the end with r.reclass to allow random forest prediction to each grid
     '''
     gscript.run_command('g.region', raster=Land_cover.split("@")[0], res=tile_size)
-    gscript.run_command('r.mask', raster=Land_cover.split("@")[0])
+    gscript.run_command('r.mask', quiet=True, raster=Land_cover.split("@")[0])
     gscript.mapcalc("empty_grid=rand(0 ,999999999)", overwrite=True, seed='auto') #Creating a raster with random values
     gscript.run_command('r.clump', quiet=True, input='empty_grid',output='clumped_grid',overwrite=True) #Assigning a unique value to each grid
-    gscript.run_command('r.mask', flags='r')
+    gscript.run_command('r.mask', quiet=True, flags='r')
     TMP_MAPS.append("empty_grid")
     TMP_MAPS.append("clumped_grid")
     
@@ -407,7 +406,7 @@ def join_2csv(file1,file2,separator=";",join='inner',fillempty='NULL'):
     'join' parameter wait either for 'left' or 'inner' according to type of join
     'fillempty' wait for the string to be use to fill the blank when no occurance is found for the join operation
     '''
-    import time,tempfile,csv,os
+    import time,csv,os
     header_list=[]
     file1_values_dict={}
     file2_values_dict={}
@@ -450,7 +449,7 @@ def join_2csv(file1,file2,separator=";",join='inner',fillempty='NULL'):
             [new_row.append('%s'%fillempty) for x in header_list2]
         new_content.append(new_row)
     #Return the result
-    outfile=os.path.join(tempfile.gettempdir(),"temp")
+    outfile=gscript.tempfile()
     fout=open(outfile,"w")
     writer=csv.writer(fout, delimiter=separator)
     writer.writerows(new_content) #Write multiples rows in the file
@@ -535,12 +534,12 @@ def RandomForest(weigthing_layer_name,vector,id):
     # Data preparation for administrative units
     # -------------------------------------------------------------------------
     # Compute area of the gridded administrative unit (vector) layer (+add column)
-    gscript.run_command('v.db.addcolumn', map=gridded_vector, columns="area double precision")
-    gscript.run_command('v.to.db', map=gridded_vector, option='area', columns='area', units='meters')
+    gscript.run_command('v.db.addcolumn', quiet=True, map=gridded_vector, columns="area double precision")
+    gscript.run_command('v.to.db', quiet=True, map=gridded_vector, option='area', columns='area', units='meters')
     # Export desired columns from the attribute table as CSV
     tmp_table=os.path.join(outputdirectory_admin,"tmp_%s.csv"%random_string(4)) # Define the path to the .csv
     query="SELECT cat,%s,area FROM %s"%(population,gridded_vector.split('@')[0])
-    gscript.run_command('db.select', sql=query, output=tmp_table)
+    gscript.run_command('db.select', quiet=True, sql=query, output=tmp_table)
     TMP_CSV.append(tmp_table)
     # Compute log of density in a new .csv file
     reader=csv.reader(open(tmp_table,'r'), delimiter='|')
@@ -656,7 +655,7 @@ def RandomForest(weigthing_layer_name,vector,id):
 
     ## Force weight to zero if no built-up pixel in the grid
     if built_up =='':
-        gscript.run_command('r.mapcalc',expression="%s=weight_float"%weigthing_layer_name, overwrite=True)
+        gscript.run_command('r.mapcalc',expression="%s=weight_float"%weigthing_layer_name, quiet=True, overwrite=True)
     else:
         gscript.run_command('g.region', raster='clumped_grid')
         gscript.run_command('r.resamp.stats', quiet=True, overwrite=True, input='class_%s'%built_up, output='sum_lc_%s'%built_up, method='sum')
