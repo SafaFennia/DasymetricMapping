@@ -248,14 +248,15 @@ def admin_boundaries(vector, id):
     so that each tile of the gridded vector will be contained in only one administrative unit
     '''
     global gridded_vector
-    gridded_vector=vector.split("@")[0]+'_'+str(tile_size)+'m_gridded'
+    current_mapset=gscript.gisenv()['MAPSET']
+    gridded_vector=vector.split("@")[0]+'_'+str(tile_size)+'m_gridded'+'@'+current_mapset
     gscript.run_command('g.region', raster='clumped_grid')
     gscript.run_command('v.to.rast', quiet=True, input=vector, type='area', output='gridded_admin_units', use='attr', attribute_column=id, overwrite=True)
     gscript.run_command('r.to.vect', quiet=True, input='gridded_admin_units', output=gridded_vector, type='area', column=id, flags='v',overwrite=True)
-    temp_name=random_string(15)+gscript.gisenv()['MAPSET']
+    temp_name=random_string(15)
     gscript.run_command('g.copy', vector='%s,%s'%(vector,temp_name))
     gscript.run_command('v.db.join', map_=gridded_vector, column='cat', other_table=temp_name, other_column=id, subset_columns=population) #join the population count
-    gscript.run_command('g.remove', flags='f', type='vector', name=temp_name)
+    gscript.run_command('g.remove', quiet=True, flags='f', type='vector', name=temp_name+'@'+current_mapset)
     TMP_MAPS.append("gridded_admin_units")
     check_no_missing_zones(vector,gridded_vector)
     
@@ -310,7 +311,7 @@ def proportion_class(rasterLayer, cl):
     gscript.run_command('i.segment.stats', flags='s', map=ref_map, rasters='%s,%s'%(tmplayer,binary_raster), raster_statistics='sum', csvfile=stat_csv, separator='comma', quiet=True, overwrite=True)
     output_csv_2=compute_proportion_csv(stat_csv) #Create a new csv containing the proportion
     ### Remove temporary layer
-    gscript.run_command('g.remove',flags='f',type='raster',name=tmplayer) 
+    gscript.run_command('g.remove', quiet=True, flags='f',type='raster',name=tmplayer) 
     # Return lists
     return (binary_raster,output_csv_1,output_csv_2)
     
