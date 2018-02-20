@@ -611,7 +611,19 @@ def RandomForest(weigthing_layer_name,vector,id):
     grid_search.best_params_    # Get the best parameters
     regressor = grid_search.best_estimator_  # Save the best regressor
     regressor.fit(x, y) # Fit the best regressor with the data
-    
+    # Print infos and save it in the logfile - Grid of parameter to be tested
+    message='Parameter grid for Random Forest tuning :\n'
+    for key in param_grid.keys():
+        message+='    '+key+' : '+', '.join([str(i) for i in list(param_grid[key])])+'\n'
+    log_text+=message+'\n'
+    print message
+    # Print infos and save it in the logfile - Tuned parameters
+    message='Optimized parameters for Random Forest tuning (5-fold cv):\n'
+    for key in grid_search.best_params_.keys():
+		message+='    %s : %s'%(key,grid_search.best_params_[key])+'\n'
+    log_text+=message+'\n'
+    print message
+
     # Predict on grids
     x_grid=df_grid[list_covar] #Get a dataframe with independent variables for grids (remaining after feature selection)
     #x_grid.to_csv(path_or_buf=os.path.join(outputdirectory_grid,"covar_x_grid.csv"), index=False) #Export in .csv for archive
@@ -869,7 +881,7 @@ def main():
         TMP_CSV.append(admin_stat_output)
         gscript.run_command('i.segment.stats', quiet=True, overwrite=True, map='gridded_admin_units', area_measures="", rasters=distance_to.split("@")[0], raster_statistics='mean', csvfile=admin_stat_output, separator='comma')
         # Save log
-        log_text+='Distance raster used : '+str(distance_to)+'\n'
+        log_text+='Distance raster used : '+str(distance_to)+'\n\n'
 
     ## Join .csv files of statistics
     for directory in [outputdirectory_grid, outputdirectory_admin]:
