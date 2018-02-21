@@ -10,7 +10,9 @@
 
 <p>It is possible not to use all the classes from the land cover map or from the optional raster. For that purpose, a list of classes to be used should be specified via the <b>lc_list</b> parameter (for land cover map) or the <b>lu_list</b> parameter (for a land use additional map).
 
-<p>The <em><a href="https://en.wikipedia.org/wiki/Out-of-bag_error">out-of-bag error</a></em> (OOB) of the model is printed in the console and give an indication about the internal accuracy of the model (cross-validation on training set at the administrative units level). The log of the Random Forest run (including the OOB error) can optionally be saved in a file whose name has to be specified via the <b>log_file</b> parameter.
+<p>The <em><a href="https://en.wikipedia.org/wiki/Out-of-bag_error">out-of-bag error</a></em> (OOB) of the model is printed in the console and give an indication about the internal accuracy of the model (cross-validation on training set at the administrative units level). 
+
+<p>The log of the Random Forest run (including the OOB error) can optionally be saved in a file whose name has to be specified via the <b>log_file</b> parameter. Using the <b>-f</b> flag, the log file could include extended informations about mean OOB (+stddev) from cross-validation for each set of parameter tested in the grid search.
 
 <p>Feature importances in the model are plotted in a graph, whose name has to be specified via the <b>plot</b> parameter. In option, a table with correspondences between rasters categories and classes name could be provided in a .csv file using <b>lc_class_name</b> and the <b>lu_class_name</b> parameters. The file cannot have any special character and have to be formatted as follows:
 <div class="code"><pre>
@@ -33,7 +35,7 @@
 
 <p>The covariates whose feature importance is less than 0.5% are, by default, removed from the final model. The <b>-a</b> flag can be used to force to keep all the covariates in the final model.
 
-<p>The parameters of the Random Forest model are tuned using grid search and cross-validation (kfold=5). Optionally, you can provide a Python dictionary with the parameter to be tested via the <b>param_grid</b> parameter. For information about the parameter to be used, please refer to the <em><a href="http://scikit-learn.org/stable/modules/generated/sklearn.ensemble.RandomForestRegressor.html">scikit-learn manual</a></em>. Here is an example of the set of parameters to be tested by default :
+<p>The parameters of the Random Forest model are tuned using grid search and cross-validation. By default, a 5-fold cross-validation scheme is used but the user can change it using the <b>kfold</b> parameter. Optionally, you can provide a Python dictionary with the parameter to be tested via the <b>param_grid</b> parameter. For information about the parameter to be used, please refer to the <em><a href="http://scikit-learn.org/stable/modules/generated/sklearn.ensemble.RandomForestRegressor.html">scikit-learn manual</a></em>. Here is an example of the set of parameters to be tested by default :
 
 <p><div class="code"><pre>
 "{'bootstrap':[True],'max_features':['sqrt',0.6,0.7],'n_estimators':[300, 400, 500],'min_samples_split':[2,3,4,5,6]}"

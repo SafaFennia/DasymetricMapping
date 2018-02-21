@@ -128,6 +128,18 @@
 #% description: Keep all covariates in the final model
 #% guisection: Feature selection and tuning
 #%end
+#%flag
+#% key: f
+#% description: Include detailed results of grid search cross-validation
+#% guisection: Feature selection and tuning
+#%end
+#%option
+#% key: kfold
+#% type: integer
+#% description: Number of k-fold cross-validation for grid search parameter optimization
+#% required: no
+#% guisection: Feature selection and tuning
+#%end
 #%option
 #% key: param_grid
 #% type: string
@@ -141,6 +153,7 @@
 #% requires: lu_list, land_use
 #% requires: lc_class_name, land_cover
 #% requires: lu_class_name, land_use
+#% requires: -f, log_file
 #%end
 
 
@@ -528,8 +541,7 @@ def RandomForest(weigthing_layer_name,vector,id):
     Function that creates a random forest model trained at the administrative units level to generate gridded prediction
     covariates are proportion of each Land Cover's class (opt: with proportion of each land use's class)
     '''
-    global log_text
-    global n_jobs
+    global log_text, log_text_extend, n_jobs, kfold
     # -------------------------------------------------------------------------
     # Data preparation for administrative units
     # -------------------------------------------------------------------------
@@ -606,11 +618,11 @@ def RandomForest(weigthing_layer_name,vector,id):
 
     #### Tuning of hyperparameters for the Random Forest regressor using "Grid search"
     # Instantiate the grid search model
-    grid_search = GridSearchCV(estimator=RandomForestRegressor(), param_grid=param_grid, cv=5, n_jobs=n_jobs, verbose=0)
+    grid_search = GridSearchCV(estimator=RandomForestRegressor(), param_grid=param_grid, cv=kfold, n_jobs=n_jobs, verbose=0)
     grid_search.fit(x, y)   # Fit the grid search to the data
-    grid_search.best_params_    # Get the best parameters
     regressor = grid_search.best_estimator_  # Save the best regressor
     regressor.fit(x, y) # Fit the best regressor with the data
+    
     # Print infos and save it in the logfile - Grid of parameter to be tested
     message='Parameter grid for Random Forest tuning :\n'
     for key in param_grid.keys():
@@ -618,12 +630,25 @@ def RandomForest(weigthing_layer_name,vector,id):
     log_text+=message+'\n'
     print message
     # Print infos and save it in the logfile - Tuned parameters
-    message='Optimized parameters for Random Forest tuning (5-fold cv):\n'
+    message='Optimized parameters for Random Forest after grid search %s-fold cross-validation tuning :\n'%kfold
     for key in grid_search.best_params_.keys():
-		message+='    %s : %s'%(key,grid_search.best_params_[key])+'\n'
+        message+='    %s : %s'%(key,grid_search.best_params_[key])+'\n'
     log_text+=message+'\n'
     print message
-
+    # Print info of the mean cross-validated score (OOB) and stddev of the best_estimator
+    best_score=grid_search.cv_results_['mean_test_score'][grid_search.best_index_]
+    best_std=grid_search.cv_results_['std_test_score'][grid_search.best_index_]
+    message="Mean cross-validated score (OOB) and stddev of the best_estimator : %0.3f (+/-%0.3f)"%(best_score,best_std)+'\n'
+    log_text+=message+'\n'
+    print message
+    # Print mean OOB and stddev for each set of parameters
+    means = grid_search.cv_results_['mean_test_score']
+    stds = grid_search.cv_results_['std_test_score']
+    message="Mean cross-validated score (OOB) and stddev for every tested set of parameter :\n"
+    for mean, std, params in zip(means, stds, grid_search.cv_results_['params']):
+        message+="%0.3f (+/-%0.03f) for %r"% (mean, std, params)+'\n'
+    log_text_extend+=message
+    
     # Predict on grids
     x_grid=df_grid[list_covar] #Get a dataframe with independent variables for grids (remaining after feature selection)
     #x_grid.to_csv(path_or_buf=os.path.join(outputdirectory_grid,"covar_x_grid.csv"), index=False) #Export in .csv for archive
@@ -697,16 +722,17 @@ def RandomForest(weigthing_layer_name,vector,id):
         os.makedirs(os.path.split(plot)[0])
     plt.savefig(plot+'.png', bbox_inches='tight', dpi=400)
 
-    message='Random forest internal Out-of-bag score (OOB) = '+str(regressor.oob_score_)
+    message='Final Random Forest model run - internal Out-of-bag score (OOB) : %0.3f'%regressor.oob_score_
     log_text+=message+'\n'
     print message
 
 def main():
-    global TMP_MAPS, TMP_CSV, vector, min_fimportance, param_grid, gridded_vector, Land_cover, Land_use, distance_to, tile_size, n_jobs, id, population, built_up, output, plot, log_file, log_text, nsres, ewres, lc_classes_list, lu_classes_list, lc_class_name, lu_class_name
+    global TMP_MAPS, TMP_CSV, vector, min_fimportance, param_grid, kfold, gridded_vector, Land_cover, Land_use, distance_to, tile_size, n_jobs, id, population, built_up, output, plot, log_file, log_text, log_text_extend, nsres, ewres, lc_classes_list, lu_classes_list, lc_class_name, lu_class_name
     TMP_MAPS = []
     TMP_CSV = []
     start_time=time.ctime()
     log_text=""
+    log_text_extend=""
     # user's values
     vector = options['vector']
     Land_cover = options['land_cover']
@@ -725,6 +751,7 @@ def main():
     lu_class_name = options['lu_class_name'] if options['lu_class_name'] else ""
     distance_to = options['distance_to'] if options['distance_to'] else ""
     min_fimportance = 0.00 if flags['a'] else 0.005   # Default value = 0.01 meaning covariates with less than 1% of importance will be removed. If flag active, then all covariates will be kept
+    kfold = int(options['kfold']) if options['kfold'] else 5  # Default value is 5-fold cross validation
     if options['param_grid']:
         try:
             literal_eval(options['param_grid'])
@@ -808,6 +835,13 @@ def main():
     if(n_jobs >= multiprocessing.cpu_count()):
         gscript.fatal(_("Requested number of jobs is > or = to available ressources. Try to reduce to at maximum <%s> jobs")%(int(multiprocessing.cpu_count())-1))
 
+    # Is kfold valid ?
+    maxfold=int(gscript.parse_command('v.db.univar', flags='g', map=vector, column='cat')['n'])   ## Corespond to leave-one-out cross-validation 
+    if(kfold > maxfold):
+        gscript.fatal(_("<kfold> parameter must be lower than %s (number of administratives area)"%maxfold))
+    if(kfold < 2):
+        gscript.fatal(_("<kfold> parameter must be higher than 2"))
+                      
     # Check if i.segment.stats is well installed
     if not gscript.find_program('i.segment.stats', '--help'):
         message = _("You first need to install the addon i.segment.stats.\n")
@@ -907,6 +941,9 @@ def main():
     logging.write('Selected spatial resolution for weighting layer : '+tile_size+' meters\n')
     logging.write('Administrative layer used : '+vector+'\n')
     logging.write(log_text)
+    if flags['f'] :
+        logging.write("\n")
+        logging.write(log_text_extend)
     logging.close()
 
 # exécution
