@@ -359,6 +359,7 @@ def compute_proportion_csv(infile):
             content.append([row[0],"{0:.5f}".format(prop)])
         except ZeroDivisionError:  #If computation of proportion failed because of 'ZeroDivisionError'
             crash_report.append(row[0])
+            content.append([row[0],"{0:.5f}".format(0.0)])  # If ZeroDivisionError, set the proportion to zero to avoid errors in next steps
             continue
     writer.writerows(content)
     os.remove(infile)
@@ -758,8 +759,8 @@ def main():
         except:
             gscript.fatal(_("The syntax of the Python dictionary with model parameter is not as expected. Please refer to the manual"))
     param_grid = literal_eval(options['param_grid']) if options['param_grid'] else {'oob_score': [True],'bootstrap': [True],
-                                                                                    'max_features': ['sqrt',0.1,0.2,0.3,0.4,0.5,0.6,0.7],
-                                                                                    'n_estimators': [50, 100, 200, 300, 400, 500, 650, 800, 1000]}
+                                                                                    'max_features': ['sqrt',0.1,0.2,0.3,0.4,0.5],
+                                                                                    'n_estimators': [50, 150, 300, 500, 700]}
     n_jobs = int(options['n_jobs'])
 
     # vector exists?

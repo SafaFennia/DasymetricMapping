@@ -38,9 +38,8 @@
 <p>The parameters of the Random Forest model are tuned using grid search and cross-validation. By default, a 5-fold cross-validation scheme is used but the user can change it using the <b>kfold</b> parameter. Optionally, you can provide a Python dictionary with the parameter to be tested via the <b>param_grid</b> parameter. For information about the parameter to be used, please refer to the <em><a href="http://scikit-learn.org/stable/modules/generated/sklearn.ensemble.RandomForestRegressor.html">scikit-learn manual</a></em>. Here is an example of the set of parameters to be tested by default :
 
 <p><div class="code"><pre>
-"{'bootstrap':[True],'max_features':['sqrt',0.6,0.7],'n_estimators':[300, 400, 500],'min_samples_split':[2,3,4,5,6]}"
+"{'oob_score':[True],'bootstrap':[True],'max_features':['sqrt',0.1,0.2,0.3,0.4,0.5],'n_estimators':[300, 400, 500]}"
 </pre></div>
-
 
 
 <h2>DEPENDENCIES</h2>
