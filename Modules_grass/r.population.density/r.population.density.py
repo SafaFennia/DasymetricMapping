@@ -721,8 +721,8 @@ def RandomForest(weigthing_layer_name,vector,id):
     plt.title("Feature importances")
     if not os.path.exists(os.path.split(plot)[0]):  #Create folder where to save the plot if not exists
         os.makedirs(os.path.split(plot)[0])
-    plt.savefig(plot+'.png', bbox_inches='tight', dpi=400)
-
+    plt.savefig(plot+'.png', bbox_inches='tight', dpi=400)  # Export in .png file (image)
+    plt.savefig(plot+'.svg', bbox_inches='tight', dpi=400)  # Export in .svg file (vectorial)
     message='Final Random Forest model run - internal Out-of-bag score (OOB) : %0.3f'%regressor.oob_score_
     log_text+=message+'\n'
     print message
