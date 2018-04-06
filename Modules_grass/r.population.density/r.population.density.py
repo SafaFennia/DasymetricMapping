@@ -751,7 +751,7 @@ def main():
     lc_class_name = options['lc_class_name'] if options['lc_class_name'] else ""
     lu_class_name = options['lu_class_name'] if options['lu_class_name'] else ""
     distance_to = options['distance_to'] if options['distance_to'] else ""
-    min_fimportance = 0.00 if flags['a'] else 0.005   # Default value = 0.01 meaning covariates with less than 1% of importance will be removed. If flag active, then all covariates will be kept
+    min_fimportance = 0.00 if flags['a'] else 0.005   # Default value = 0.005 meaning covariates with less than 0.5% of importance will be removed. If flag active, then all covariates will be kept
     kfold = int(options['kfold']) if options['kfold'] else 5  # Default value is 5-fold cross validation
     if options['param_grid']:
         try:
