@@ -616,7 +616,7 @@ def RandomForest(weigthing_layer_name,vector,id):
     feature_idx = fited.get_support()   # Get list of True/False values according to the fact the OOB score of the covariate is upper the threshold 
     list_covar = list(x.columns[feature_idx])  # Update list of covariates with the selected features 
     x=fited.transform(x)  # Replace the dataframe with the selected features
-    message="Selected covariates for the random forest model (with feature importance upper than %s %)"%min_fimportance*100  # Print the selected covariates for the model
+    message="Selected covariates for the random forest model (with feature importance upper than {value} %)".format(value=min_fimportance*100)  # Print the selected covariates for the model
     message+="\n".join(list_covar)
     log_text+=message+'\n'
     
