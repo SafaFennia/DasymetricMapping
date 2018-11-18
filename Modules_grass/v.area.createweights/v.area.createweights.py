@@ -6,7 +6,9 @@
 #*
 #* AUTHOR(S):  Grippa Tais, Safa Fennia
 #*
-#* PURPOSE:    Create a weighting layer for dasymetric mapping, using a random forest regression model
+#* PURPOSE:    Create a weighting layer for dasymetric mapping, using a random forest regression model.
+#*             The model is trained at polygons level (vector) (e.g., administrative units) and predict weights in a regular Grid (raster)
+#*             The covariates computed are the proportion of categorical raster (e.g., land cover or land use map) and mean of a qualitative variable (e.g., distance raster)
 #*
 #* COPYRIGHT:  (C) 2018 Grippa Tais, Safa Fennia
 #*             ANAGEO, Université libre de Bruxelles, Belgique
@@ -24,8 +26,14 @@
 #****************************************************************
 
 #%module
+#% label: Create weights for dasymetric mapping using Random Forest
 #% description: Creates a weighting layer with Random Forest for the reallocation of a response variable in a regular Grid (dasymetric mapping)
-#% keywords: Dasymetry, Dasymetric mapping Density, Land Cover, Random Forest
+#% keyword: vector
+#% keyword: interpolation
+#% keyword: raster
+#% keyword: dasymetry
+#% keyword: dasymetric mapping
+#% keyword: random Forest
 #%end
 #%option G_OPT_V_INPUT
 #% key: vector
@@ -109,12 +117,12 @@
 #%end
 #%option G_OPT_F_INPUT
 #% key: lc_class_name
-#% description: Csv file containing class names for land cover map
+#% description: Csv file containing legend (class names) for the land cover map
 #% required: no
 #%end
 #%option G_OPT_F_INPUT
 #% key: lu_class_name
-#% description: Csv file containing class names for land use map
+#% description: Csv file containing legend (class names) for the land use map
 #% required: no
 #%end
 #%option
@@ -139,7 +147,7 @@
 #% description: Number of k-fold cross-validation for grid search parameter optimization
 #% required: no
 #% guisection: Feature selection and tuning
-#%end
+#%end overwrite=True
 #%option
 #% key: param_grid
 #% type: string
@@ -156,6 +164,8 @@
 #% requires: -f, log_file
 #%end
 
+### TODO:   Standardise by default the weights at output (
+### TODO:   Create a flag (option) for computation of density from the value stored in the attribute table (Value/area)
 
 ## Import standard python libraries
 import os, sys, glob, time
@@ -176,13 +186,13 @@ import matplotlib.pyplot as plt
 # import multiprocessing and functools libraries
 import multiprocessing
 from multiprocessing import Pool
-from functools import partial 
+from functools import partial
 # import literal_eval
 from ast import literal_eval
 
 ## Import Pandas library (View and manipulaiton of tables)
 try:
-    import pandas as pd  #TODO: remove dependency to Pandas (still requiered for selecting in dataframes based on column names)
+    import pandas as pd  #TODO: remove dependency to Pandas. Still requiered for selecting in dataframes based on column names. Should be removed by using Numpy only.
 except:
     gscript.fatal("Pandas is not installed ")
 
@@ -225,7 +235,7 @@ def Data_prep(categorical_raster):
     nsres=info.nsres
     ewres=info.ewres
     L = []
-    L=[cl for cl in gscript.parse_command('r.category',map=categorical_raster)]
+    L=[cl.split("	")[0] for cl in gscript.parse_command('r.category',map=categorical_raster)]
     for i,x in enumerate(L):  #Make sure the format is UTF8 and not Unicode
         L[i]=x.encode('UTF8')
     L.sort(key=float) #Sort the raster categories in ascending.
@@ -252,11 +262,11 @@ def check_no_missing_zones(vector_origin, vector_gridded):
         message=_(("A tile size of %s m seems to large and produce loss of some administrative units when rasterizing them.\n") % tile_size)
         message+=_(("Try to reduce the 'tile_size' parameter or edit the <%s> vector to merge smallest administrative units with their neighoring units") % vector_origin)
         gscript.fatal(message)
-    
-    
+
+
 def admin_boundaries(vector, id):
     '''
-    Function convecting the vecotor to raster then raster to vector: boundaries will have a staircase appearence
+    Function convecting the vector to raster then raster to vector: boundaries will have a staircase appearence
     so that each tile of the gridded vector will be contained in only one administrative unit
     '''
     global gridded_vector
@@ -271,22 +281,24 @@ def admin_boundaries(vector, id):
     gscript.run_command('g.remove', quiet=True, flags='f', type='vector', name=temp_name+'@'+current_mapset)
     TMP_MAPS.append("gridded_admin_units")
     check_no_missing_zones(vector,gridded_vector)
-    
-    
+
+
 def create_clumped_grid(tile_size):
     '''
     Function creating clumped grid which will be used for computing raster's classes proportion at grid level. This clumped grid will
     also be used at the end with r.reclass to allow random forest prediction to each grid
     '''
-    gscript.run_command('g.region', raster=Land_cover.split("@")[0], res=tile_size)
-    gscript.run_command('r.mask', quiet=True, raster=Land_cover.split("@")[0])
+    gscript.run_command('g.region', raster=Land_cover.split("@")[0], res=tile_size, flags='a') # Flag 'a' force the limits of the region to match exactly the desired resolution
+    if gscript.find_file('MASK', element = 'cell')['name']:
+        sys.exit("The script stops because there is an active MASK in the mapset. Please remove it first with 'r.mask -r'")
+	gscript.run_command('r.mask', quiet=True, raster=Land_cover.split("@")[0])
     gscript.mapcalc("empty_grid=rand(0 ,999999999)", overwrite=True, seed='auto') #Creating a raster with random values
     gscript.run_command('r.clump', quiet=True, input='empty_grid',output='clumped_grid',overwrite=True) #Assigning a unique value to each grid
     gscript.run_command('r.mask', quiet=True, flags='r')
     TMP_MAPS.append("empty_grid")
     TMP_MAPS.append("clumped_grid")
-    
-    
+
+
 def random_string(N):
     '''
     Function generating a random string of size N
@@ -295,12 +307,12 @@ def random_string(N):
     prefix=random.choice(string.ascii_uppercase + string.ascii_lowercase)
     suffix=''.join(random.choice(string.ascii_uppercase + string.ascii_lowercase + string.digits) for _ in range(N))
     return prefix+suffix
-    
-    
+
+
 def proportion_class(rasterLayer, cl):
     '''
-    Function extracting a binary map for class 'cl' in raster 'rasterLayer', then computing the proportion of this class in both administratives units and in grids. 
-    The computational region should be defined properly before running this function. 
+    Function extracting a binary map for class 'cl' in raster 'rasterLayer', then computing the proportion of this class in both administratives units and in grids.
+    The computational region should be defined properly before running this function.
     '''
     ### Create a binary raster for the current class
     prefix = 'LC' if rasterLayer == Land_cover.split("@")[0] else 'LU'  # Adaptative prefix according to the input raster (land_cover of land_use)
@@ -308,10 +320,10 @@ def proportion_class(rasterLayer, cl):
     gscript.run_command('r.mapcalc', expression='%s=if(%s==%s,1,0)'%(binary_raster,rasterLayer,cl),overwrite=True,quiet=True) # Mapcalc to create binary raster for the expected class 'cl'
     ### Create a temporary copy of the current binary raster with all pixels values equal to 1 (to be used for computing proportion of current binary class)
     tmplayer='tmp_%s_%s'%(binary_raster,random_string(4))
-    gscript.run_command('r.mapcalc', expression='%s=if(%s==1,1,1)'%(tmplayer,binary_raster),overwrite=True,quiet=True) # Mapcalc to create binary raster for the expected class 'cl'
-    # Fill potential remaining null values with 0 value (null values existing in the 'rasterLayer' will remain null in the binary, using r.mapcalc)
-    gscript.run_command('r.null', quiet=True, map=binary_raster, null='0') 
-    gscript.run_command('r.null', quiet=True, map=tmplayer, null='0')   
+    gscript.run_command('r.mapcalc', expression='%s=if(%s==1,1,1)'%(tmplayer,binary_raster),overwrite=True,quiet=True)
+    # Fill potential remaining null values with 0 value (when using r.mapcalc, null values existing in the 'rasterLayer' will remain null in the binary)
+    gscript.run_command('r.null', quiet=True, map=binary_raster, null='0')
+    gscript.run_command('r.null', quiet=True, map=tmplayer, null='0')
     ### Compute proportion of pixels of the current class - Administrative units
     stat_csv=os.path.join(outputdirectory_admin,"%s_%s.csv"%(prefix,cl))
     ref_map='gridded_admin_units'
@@ -323,11 +335,11 @@ def proportion_class(rasterLayer, cl):
     gscript.run_command('i.segment.stats', flags='s', map=ref_map, rasters='%s,%s'%(tmplayer,binary_raster), raster_statistics='sum', csvfile=stat_csv, separator='comma', quiet=True, overwrite=True)
     output_csv_2=compute_proportion_csv(stat_csv) #Create a new csv containing the proportion
     ### Remove temporary layer
-    gscript.run_command('g.remove', quiet=True, flags='f',type='raster',name=tmplayer) 
+    gscript.run_command('g.remove', quiet=True, flags='f',type='raster',name=tmplayer)
     # Return lists
     return (binary_raster,output_csv_1,output_csv_2)
-    
-    
+
+
 def compute_proportion_csv(infile):
     '''
     Function used in 'proportion_class' function. It take as input the csv from i.segment.stats with the area (in number of pixels)
@@ -411,7 +423,7 @@ def ordered_list_of_path(indir,pattern_A,pattern_B="",pattern_C=""):
             csvList.append(item)
     return csvList
 
-            
+
 def join_2csv(file1,file2,separator=";",join='inner',fillempty='NULL'):
     '''
     Function that join two csv files according to the first column (primary key).
@@ -467,7 +479,7 @@ def join_2csv(file1,file2,separator=";",join='inner',fillempty='NULL'):
     fout=open(outfile,"w")
     writer=csv.writer(fout, delimiter=separator)
     writer.writerows(new_content) #Write multiples rows in the file
-    time.sleep(0.5) # To be sure the file will not be close to fast (the content could be uncompletly filled) 
+    time.sleep(0.5) # To be sure the file will not be close to fast (the content could be uncompletly filled)
     fout.close()
     return outfile
 
@@ -500,7 +512,7 @@ def join_multiplecsv(fileList,outfile,separator=";",join='inner', fillempty='NUL
         shutil.copy2(tmp_file,outfile)
         # Print what happend
         #print "%s individual .csv files were joint together."%nbfile    # Uncomment if you want a print
-        
+
 
 def labels_from_csv(current_labels):
     '''
@@ -565,17 +577,17 @@ def RandomForest(weigthing_layer_name,vector,id):
     reader.next() # Pass the header
     [new_content.append([row[0],ma.log(int(row[1])/float(row[2]))]) for row in reader]  # Compute log (ln) of the density
     writer.writerows(new_content)
-    time.sleep(0.5) # To be sure the file will not be close to fast (the content could be uncompletly filled) 
+    time.sleep(0.5) # To be sure the file will not be close to fast (the content could be uncompletly filled)
     fout.close()
-    # Define the path to the file with all co-variates 
+    # Define the path to the file with all co-variates
     all_stats_grid=os.path.join(outputdirectory_grid,"all_stats.csv") # for grid level
     all_stats_admin=os.path.join(outputdirectory_admin,"all_stats.csv") # for admin level
-    # For admin level : join all co-variates with the log of density (response variable of the model) 
-    tmp_file=join_2csv(log_density_csv,all_stats_admin,separator=",",join='inner',fillempty='NULL')        
+    # For admin level : join all co-variates with the log of density (response variable of the model)
+    tmp_file=join_2csv(log_density_csv,all_stats_admin,separator=",",join='inner',fillempty='NULL')
     admin_attribute_table=os.path.join(outputdirectory_admin,"admin_attribute_table.csv")
     shutil.copy2(tmp_file,admin_attribute_table) # Copy the file from temp folder to admin folder
     TMP_CSV.append(tmp_file)
-    
+
     # -------------------------------------------------------------------------
     # Creating RF model
     # -------------------------------------------------------------------------
@@ -613,20 +625,20 @@ def RandomForest(weigthing_layer_name,vector,id):
     rfmodel=RandomForestRegressor(n_estimators = 500, oob_score = True, max_features='auto', n_jobs=-1)
     a=SelectFromModel(rfmodel, threshold=min_fimportance)
     fited=a.fit(x, y)
-    feature_idx = fited.get_support()   # Get list of True/False values according to the fact the OOB score of the covariate is upper the threshold 
-    list_covar = list(x.columns[feature_idx])  # Update list of covariates with the selected features 
+    feature_idx = fited.get_support()   # Get list of True/False values according to the fact the OOB score of the covariate is upper the threshold
+    list_covar = list(x.columns[feature_idx])  # Update list of covariates with the selected features
     x=fited.transform(x)  # Replace the dataframe with the selected features
     message="Selected covariates for the random forest model (with feature importance upper than {value} %) : \n".format(value=min_fimportance*100)  # Print the selected covariates for the model
     message+="\n".join(list_covar)
     log_text+=message+'\n\n'
-    
+
     #### Tuning of hyperparameters for the Random Forest regressor using "Grid search"
     # Instantiate the grid search model
     grid_search = GridSearchCV(estimator=RandomForestRegressor(), param_grid=param_grid, cv=kfold, n_jobs=n_jobs, verbose=0)
     grid_search.fit(x, y)   # Fit the grid search to the data
     regressor = grid_search.best_estimator_  # Save the best regressor
     regressor.fit(x, y) # Fit the best regressor with the data
-    
+
     # Print infos and save it in the logfile - Grid of parameter to be tested
     message='Parameter grid for Random Forest tuning :\n'
     for key in param_grid.keys():
@@ -652,7 +664,7 @@ def RandomForest(weigthing_layer_name,vector,id):
     for mean, std, params in zip(means, stds, grid_search.cv_results_['params']):
         message+="%0.3f (+/-%0.03f) for %r"% (mean, std, params)+'\n'
     log_text_extend+=message
-    
+
     # Predict on grids
     x_grid=df_grid[list_covar] #Get a dataframe with independent variables for grids (remaining after feature selection)
     #x_grid.to_csv(path_or_buf=os.path.join(outputdirectory_grid,"covar_x_grid.csv"), index=False) #Export in .csv for archive
@@ -834,18 +846,18 @@ def main():
         param_grid['oob_score']=[True]
     elif param_grid['oob_score']!=[True]:
         param_grid['oob_score']=[True]
-   
+
     # valid n_jobs?
     if(n_jobs >= multiprocessing.cpu_count()):
         gscript.fatal(_("Requested number of jobs is > or = to available ressources. Try to reduce to at maximum <%s> jobs")%(int(multiprocessing.cpu_count())-1))
 
     # Is kfold valid ?
-    maxfold=int(gscript.parse_command('v.db.univar', flags='g', map=vector, column='cat')['n'])   ## Corespond to leave-one-out cross-validation 
+    maxfold=int(gscript.parse_command('v.db.univar', flags='g', map=vector, column='cat')['n'])   ## Corespond to leave-one-out cross-validation
     if(kfold > maxfold):
         gscript.fatal(_("<kfold> parameter must be lower than %s (number of administratives area)"%maxfold))
     if(kfold < 2):
         gscript.fatal(_("<kfold> parameter must be higher than 2"))
-                      
+
     # Check if i.segment.stats is well installed
     if not gscript.find_program('i.segment.stats', '--help'):
         message = _("You first need to install the addon i.segment.stats.\n")
