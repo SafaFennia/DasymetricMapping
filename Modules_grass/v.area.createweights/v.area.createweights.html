@@ -1,5 +1,10 @@
 <h2>DESCRIPTION</h2>
 
+TODO : 
+Modify the description for not use of relative data as response variable but the user now have to provide directly relative data (e.g., population density, GDP per capita)
+
+
+
 <em>r.population.density</em> creates a weighting layer to be used for redistribution of population count known at some administrative unit level into a raster grid with a finer spatial resolution <em><a href="https://en.wikipedia.org/wiki/Dasymetric_map">(dasymetric mapping)</a></em>. Once the weighting layer has been created using the current add-on, the dasymetric mapping can be performed using the <a href="https://grass.osgeo.org/grass72/manuals/addons/v.area.weigh.html">v.area.weigh</a> module. <em>r.population.density</em> also creates a 'gridded' version of the administrative units, whose borders will appear as staircases following the spatial resolution of the weighting layer produced, which can be used in v.area.weigh.
 
 <p>The add-on trains a Random Forest (regression) model at the level of administrative units and predict a weight in a raster grid. The spatial resolution of this raster should be specified via the <b>tile_size</b> parameter, and its name via the <b>output</b> parameter.
