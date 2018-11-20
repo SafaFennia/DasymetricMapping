@@ -555,35 +555,32 @@ def RandomForest(weigthing_layer_name,vector,id):
     covariates are proportion of each Land Cover's class (opt: with proportion of each land use's class)
     '''
     global log_text, log_text_extend, n_jobs, kfold
+	# Define the path to the file with all co-variates
+    all_stats_grid=os.path.join(outputdirectory_grid,"all_stats.csv") # for grid level
+    all_stats_admin=os.path.join(outputdirectory_admin,"all_stats.csv") # for admin level
     # -------------------------------------------------------------------------
-    # Data preparation for administrative units
+    # Data preparation for administrative units (compute natural log of response variable)
     # -------------------------------------------------------------------------
-    # Compute area of the gridded administrative unit (vector) layer (+add column)
-    gscript.run_command('v.db.addcolumn', quiet=True, map=gridded_vector, columns="area double precision")
-    gscript.run_command('v.to.db', quiet=True, map=gridded_vector, option='area', columns='area', units='meters')
-    # Export desired columns from the attribute table as CSV
-    tmp_table=os.path.join(outputdirectory_admin,"tmp_%s.csv"%random_string(4)) # Define the path to the .csv
-    query="SELECT cat,%s,area FROM %s"%(population,gridded_vector.split('@')[0])
+	# Export desired columns from the attribute table as CSV
+    tmp_table=os.path.join(outputdirectory_admin,"%s.csv"%random_layer_name()) # Define the path to the .csv
+    query="SELECT cat,%s FROM %s"%(response_column,gridded_vector.split('@')[0])
     gscript.run_command('db.select', quiet=True, sql=query, output=tmp_table)
     TMP_CSV.append(tmp_table)
-    # Compute log of density in a new .csv file
+    # Compute log of the response variable in a new .csv file
     reader=csv.reader(open(tmp_table,'r'), delimiter='|')
-    log_density_csv=os.path.join(outputdirectory_admin,"log_pop_density.csv") # Define the path to the .csv containing the log of density
-    fout=open(log_density_csv,'w')
+    log_response_csv=os.path.join(outputdirectory_admin,"log_response_variable.csv") # Define the path to the .csv containing the log of the response variable
+    fout=open(log_response_csv,'w')
     writer=csv.writer(fout, delimiter=',')
     new_content=[]
-    new_header=['cat','log_population_density']
+    new_header=['cat','log_response']
     new_content.append(new_header)
     reader.next() # Pass the header
-    [new_content.append([row[0],ma.log(int(row[1])/float(row[2]))]) for row in reader]  # Compute log (ln) of the density
+    [new_content.append([row[0],ma.log(float(row[1]))]) for row in reader]  # Compute natural log (ln) of the response variable
     writer.writerows(new_content)
     time.sleep(0.5) # To be sure the file will not be close to fast (the content could be uncompletly filled)
     fout.close()
-    # Define the path to the file with all co-variates
-    all_stats_grid=os.path.join(outputdirectory_grid,"all_stats.csv") # for grid level
-    all_stats_admin=os.path.join(outputdirectory_admin,"all_stats.csv") # for admin level
-    # For admin level : join all co-variates with the log of density (response variable of the model)
-    tmp_file=join_2csv(log_density_csv,all_stats_admin,separator=",",join='inner',fillempty='NULL')
+    # For admin level : join all co-variates with the log of respons variable
+    tmp_file=join_2csv(log_response_csv,all_stats_admin,separator=",",join='inner',fillempty='NULL')
     admin_attribute_table=os.path.join(outputdirectory_admin,"admin_attribute_table.csv")
     shutil.copy2(tmp_file,admin_attribute_table) # Copy the file from temp folder to admin folder
     TMP_CSV.append(tmp_file)
@@ -594,15 +591,6 @@ def RandomForest(weigthing_layer_name,vector,id):
     df_admin = pd.read_csv(admin_attribute_table) #reading the csv file as dataframe
     df_grid = pd.read_csv(all_stats_grid)
 
-    ## Changing null values to zero
-    # for df_grid
-    #features = df_grid.columns[:]
-    #for i in features:
-    #    df_grid[i].fillna(0, inplace=True)
-    # for df_admin
-    #features = df_admin.columns[:]
-    #for i in features:
-    #    df_admin[i].fillna(0, inplace=True)
 
     ## Make a list with name of covariables columns
     list_covar=[]
@@ -614,11 +602,11 @@ def RandomForest(weigthing_layer_name,vector,id):
     if(distance_to != ''):
         list_covar.append(distance_to.split("@")[0]+"_mean")
 
-    ## Saving variable to predict (dependent variable)
-    y = df_admin['log_population_density']
+    ## Saving variable to predict (response variable)
+    y = df_admin['log_response']
 
     ## Saving covariable for prediction (independent variables)
-    x=df_admin[list_covar]  #Get a dataframe with independent variables for administratives units
+    x = df_admin[list_covar]  #Get a dataframe with independent variables for administratives units
     #x.to_csv(path_or_buf=os.path.join(outputdirectory_admin,"covar_x.csv"), index=False) #Export in .csv for archive
 
     # Remove features whose importance is less than a threshold (Feature selection)
@@ -686,7 +674,7 @@ def RandomForest(weigthing_layer_name,vector,id):
     for i, cat in enumerate(cat_list):
         rule+=str(cat)
         rule+="="
-        rule+=str(int(round(weight_list[i]*1000000000,0)))  #reclass rule of r.reclass requier INTEGER but random forest prediction could be very low values.
+        rule+=str(int(round(weight_list[i]*10000,0)))  #reclass rule of r.reclass requier INTEGER but random forest prediction could be very low values.
         rule+="\n"
     rule+="*"
     rule+="="
@@ -702,7 +690,7 @@ def RandomForest(weigthing_layer_name,vector,id):
     ## Reclass segments raster layer
     gscript.run_command('g.region', raster='clumped_grid')
     gscript.run_command('r.reclass', quiet=True, overwrite=True, input="clumped_grid", output="weight_int", rules=outputcsv)
-    gscript.run_command('r.mapcalc', expression="weight_float=float(weight_int)/float(1000000000)", quiet=True, overwrite=True) #Get back to the original 'float' prediction of population density of random forest
+    gscript.run_command('r.mapcalc', expression="weight_float=float(weight_int)/float(10000)", quiet=True, overwrite=True) #Get back to the original 'float' prediction of population density of random forest
     TMP_MAPS.append("weight_int")
     TMP_MAPS.append("weight_float")
 
