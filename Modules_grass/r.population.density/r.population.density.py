@@ -15,6 +15,7 @@
 #*             First Version: 2017/07/18
 #*             Second Version: 2017/11/13
 #*             Third Version: 2018/02/02
+#*             4th Version: 2019/11/08
 #*
 #*             This program is free software under the
 #*             GNU General Public License (>=v2).
@@ -156,6 +157,9 @@
 #% requires: -f, log_file
 #%end
 
+# TODOS: Make the code more general without use of terms 'density' 'population' etc... 
+# TODOS: Remove part of the code not needed anymore with use of r.zonal.classes (njob ?,)
+# TODOS: Rename land cover and land use terms as 'categorical_A' and 'categorical_B' 
 
 ## Import standard python libraries
 import os, sys, glob, time
@@ -219,13 +223,13 @@ def create_tempdirs():
 
 def Data_prep(categorical_raster):
     '''
-    Function that extracts resolution and sorted list of classes of a categorical raster (like land cover or land use information).
+    Function that extracts resolution and sorted list of classes of a categorical raster (e.g., a land cover or a land use map).
     '''
     info = gscript.raster_info(categorical_raster)
     nsres=info.nsres
     ewres=info.ewres
     L = []
-    L=[cl.split("	")[0] for cl in gscript.parse_command('r.category',map=categorical_raster)]
+    L=[cl.split("   ")[0] for cl in gscript.parse_command('r.category',map=categorical_raster)]
     for i,x in enumerate(L):  #Make sure the format is UTF8 and not Unicode
         L[i]=x.encode('UTF8')
     L.sort(key=float) #Sort the raster categories in ascending.
@@ -295,80 +299,12 @@ def random_string(N):
     prefix=random.choice(string.ascii_uppercase + string.ascii_lowercase)
     suffix=''.join(random.choice(string.ascii_uppercase + string.ascii_lowercase + string.digits) for _ in range(N))
     return prefix+suffix
-    
-    
-def proportion_class(rasterLayer, cl):
-    '''
-    Function extracting a binary map for class 'cl' in raster 'rasterLayer', then computing the proportion of this class in both administratives units and in grids. 
-    The computational region should be defined properly before running this function. 
-    '''
-    ### Create a binary raster for the current class
-    prefix = 'LC' if rasterLayer == Land_cover.split("@")[0] else 'LU'  # Adaptative prefix according to the input raster (land_cover of land_use)
-    binary_raster = prefix+"_"+cl  # Set the name of the binary raster
-    gscript.run_command('r.mapcalc', expression='%s=if(%s==%s,1,0)'%(binary_raster,rasterLayer,cl),overwrite=True,quiet=True) # Mapcalc to create binary raster for the expected class 'cl'
-    ### Create a temporary copy of the current binary raster with all pixels values equal to 1 (to be used for computing proportion of current binary class)
-    tmplayer='tmp_%s_%s'%(binary_raster,random_string(4))
-    gscript.run_command('r.mapcalc', expression='%s=if(%s==1,1,1)'%(tmplayer,binary_raster),overwrite=True,quiet=True) # Mapcalc to create binary raster for the expected class 'cl'
-    # Fill potential remaining null values with 0 value (null values existing in the 'rasterLayer' will remain null in the binary, using r.mapcalc)
-    gscript.run_command('r.null', quiet=True, map=binary_raster, null='0') 
-    gscript.run_command('r.null', quiet=True, map=tmplayer, null='0')   
-    ### Compute proportion of pixels of the current class - Administrative units
-    stat_csv=os.path.join(outputdirectory_admin,"%s_%s.csv"%(prefix,cl))
-    ref_map='gridded_admin_units'
-    gscript.run_command('i.segment.stats', flags='s', map=ref_map, rasters='%s,%s'%(tmplayer,binary_raster), raster_statistics='sum', csvfile=stat_csv, separator='comma', quiet=True, overwrite=True)
-    output_csv_1=compute_proportion_csv(stat_csv) #Create a new csv containing the proportion
-    ### Compute proportion of pixels of the current class - Grids
-    stat_csv=os.path.join(outputdirectory_grid,"%s_%s.csv"%(prefix,cl))
-    ref_map='clumped_grid'
-    gscript.run_command('i.segment.stats', flags='s', map=ref_map, rasters='%s,%s'%(tmplayer,binary_raster), raster_statistics='sum', csvfile=stat_csv, separator='comma', quiet=True, overwrite=True)
-    output_csv_2=compute_proportion_csv(stat_csv) #Create a new csv containing the proportion
-    ### Remove temporary layer
-    gscript.run_command('g.remove', quiet=True, flags='f',type='raster',name=tmplayer) 
-    # Return lists
-    return (binary_raster,output_csv_1,output_csv_2)
-    
-    
-def compute_proportion_csv(infile):
-    '''
-    Function used in 'proportion_class' function. It take as input the csv from i.segment.stats with the area (in number of pixels)
-    the sum of pixels of the binary raster and create a new csv with the proportion
-    '''
-    # Set the path to the outputfile
-    head, tail = os.path.split(infile)
-    root, ext = os.path.splitext(tail)
-    outfile=os.path.join(head,root+"_prop"+ext)
-    # Create new csv reader and writer objects
-    reader=csv.reader(open(infile,'r'), delimiter=",")
-    writer=csv.writer(open(outfile,'w'), delimiter=",")
-    # Initialize empty lists
-    crash_report=[]
-    content=[]
-    # Save the first line as header and create the new header
-    header=reader.next()
-    new_header=[]
-    new_header.append(header[0])
-    index=header[2].find("_sum")
-    new_header.append(header[2][:index]+'_proportion')
-    content.append(new_header)  #Create new header with first original column and current class related name for proportion
-    # Loop through the rest of the rows (header is passed)
-    for row in reader:
-        pix_nb=float(row[1]) #Area of the unit (in number of pixels)
-        class_nb=float(row[2]) #Number of pixels of current class (binary raster)
-        try:
-            prop=100*class_nb/pix_nb
-            content.append([row[0],"{0:.5f}".format(prop)])
-        except ZeroDivisionError:  #If computation of proportion failed because of 'ZeroDivisionError'
-            crash_report.append(row[0])
-            content.append([row[0],"{0:.5f}".format(0.0)])  # If ZeroDivisionError, set the proportion to zero to avoid errors in next steps
-            continue
-    writer.writerows(content)
-    os.remove(infile)
-    # Print notification of ZeroDivisionError if it happened
-    if len(crash_report)>0:
-        print "An 'ZeroDivisionError' has been registered for the following <%s>"%header[0]+"\n".join(crash_report)
-    # Return the path to the temporary csv file
-    return outfile
 
+
+def compute_proportion_csv(categorical_raster, zone_raster, prefix, outputfile):
+    gscript.run_command('r.zonal.classes', overwrite=True, quiet=True, zone_map=zone_raster, 
+                        raster=categorical_raster, prefix=prefix, decimals='4', statistics='proportion', 
+                        csvfile=outputfile, separator='comma')
 
 def atoi(text):
     '''
@@ -484,22 +420,22 @@ def join_multiplecsv(fileList,outfile,separator=";",join='inner', fillempty='NUL
             os.remove(outfile)
             #print "File '%s' will be overwrited."%outfile   # Uncomment if you want a print
         nbfile=len(fileList)
-        if nbfile<=1: #Check if there are at least 2 files in the list
-            sys.exit("This function require at least two .csv files to be jointed together.")
-        # Copy the list of file in a queue list
-        queue_list=list(fileList)
-        # Left join on the two first files
-        file1=queue_list.pop(0)
-        file2=queue_list.pop(0)
-        tmp_file=join_2csv(file1,file2,separator=separator,join=join, fillempty=fillempty)
-        # Left join on the rest of the files in the list
-        while len(queue_list)>0:
+        if nbfile > 1: #Check if there are at least 2 files in the list
+            # Copy the list of file in a queue list
+            queue_list=list(fileList)
+            # Left join on the two first files
+            file1=queue_list.pop(0)
             file2=queue_list.pop(0)
-            tmp_file=join_2csv(tmp_file,file2,separator=separator,join=join, fillempty=fillempty)
+            tmp_file=join_2csv(file1,file2,separator=separator,join=join, fillempty=fillempty)
+            # Left join on the rest of the files in the list
+            while len(queue_list)>0:
+                file2=queue_list.pop(0)
+                tmp_file=join_2csv(tmp_file,file2,separator=separator,join=join, fillempty=fillempty)
+        else:       # In case there is only one file in the list
+            tmp_file = fileList[0] 
         #Copy the temporary file to the desired output path
         shutil.copy2(tmp_file,outfile)
-        # Print what happend
-        #print "%s individual .csv files were joint together."%nbfile    # Uncomment if you want a print
+        os.remove(tmp_file)
         
 
 def labels_from_csv(current_labels):
@@ -520,13 +456,13 @@ def labels_from_csv(current_labels):
             lu_class_rename_dict[classcode]=classname
     for l in current_labels:
         if l[:2]=='LC':
-            classnum=l[3:l.index('_proportion')]
+            classnum=l[l.index('_prop_')+len('_prop_'):]
             if classnum in lc_class_rename_dict.keys():
                 new_label.append('LC "'+lc_class_rename_dict[classnum]+'"')
             else:
                 new_label.append('LC "'+classnum+'"')
         elif l[:2]=='LU':
-                        classnum=l[3:l.index('_proportion')]
+                        classnum=l[l.index('_prop_')+len('_prop_'):]
                         if classnum in lu_class_rename_dict.keys():
                             new_label.append('LU "'+lu_class_rename_dict[classnum]+'"')
                         else:
@@ -550,17 +486,17 @@ def RandomForest(weigthing_layer_name,vector,id):
     gscript.run_command('v.db.addcolumn', quiet=True, map=gridded_vector, columns="area double precision")
     gscript.run_command('v.to.db', quiet=True, map=gridded_vector, option='area', columns='area', units='meters')
     # Export desired columns from the attribute table as CSV
-    tmp_table=os.path.join(outputdirectory_admin,"tmp_%s.csv"%random_string(4)) # Define the path to the .csv
-    query="SELECT cat,%s,area FROM %s"%(population,gridded_vector.split('@')[0])
-    gscript.run_command('db.select', quiet=True, sql=query, output=tmp_table)
-    TMP_CSV.append(tmp_table)
+    area_table = gscript.tempfile() # Define the path to the .csv
+    query = "SELECT cat,%s,area FROM %s"%(population,gridded_vector.split('@')[0])
+    gscript.run_command('db.select', quiet=True, sql=query, output=area_table)
+    TMP_CSV.append(area_table)
     # Compute log of density in a new .csv file
-    reader=csv.reader(open(tmp_table,'r'), delimiter='|')
-    log_density_csv=os.path.join(outputdirectory_admin,"log_pop_density.csv") # Define the path to the .csv containing the log of density
-    fout=open(log_density_csv,'w')
-    writer=csv.writer(fout, delimiter=',')
-    new_content=[]
-    new_header=['cat','log_population_density']
+    reader = csv.reader(open(area_table,'r'), delimiter='|')
+    log_density_csv = gscript.tempfile() # Define the path to the .csv containing the log of density
+    fout = open(log_density_csv,'w')
+    writer = csv.writer(fout, delimiter=',')
+    new_content = []
+    new_header = ['cat','log_population_density']
     new_content.append(new_header)
     reader.next() # Pass the header
     [new_content.append([row[0],ma.log(int(row[1])/float(row[2]))]) for row in reader]  # Compute log (ln) of the density
@@ -568,13 +504,11 @@ def RandomForest(weigthing_layer_name,vector,id):
     time.sleep(0.5) # To be sure the file will not be close to fast (the content could be uncompletly filled) 
     fout.close()
     # Define the path to the file with all co-variates 
-    all_stats_grid=os.path.join(outputdirectory_grid,"all_stats.csv") # for grid level
-    all_stats_admin=os.path.join(outputdirectory_admin,"all_stats.csv") # for admin level
+    all_stats_grid = allstatfile['grid'] # for grid level
+    all_stats_admin = allstatfile['admin'] # for admin level
     # For admin level : join all co-variates with the log of density (response variable of the model) 
-    tmp_file=join_2csv(log_density_csv,all_stats_admin,separator=",",join='inner',fillempty='NULL')        
-    admin_attribute_table=os.path.join(outputdirectory_admin,"admin_attribute_table.csv")
-    shutil.copy2(tmp_file,admin_attribute_table) # Copy the file from temp folder to admin folder
-    TMP_CSV.append(tmp_file)
+    admin_attribute_table=join_2csv(log_density_csv,all_stats_admin,separator=",",join='inner',fillempty='NULL')        
+    TMP_CSV.append(admin_attribute_table)
     
     # -------------------------------------------------------------------------
     # Creating RF model
@@ -595,10 +529,10 @@ def RandomForest(weigthing_layer_name,vector,id):
     ## Make a list with name of covariables columns
     list_covar=[]
     for cl in lc_classes_list:
-        list_covar.append("LC_"+cl+"_proportion")
+        list_covar.append("LC_prop_%s"%cl)
     if (Land_use != ''):
         for cl in lu_classes_list:
-            list_covar.append("LU_"+cl+"_proportion")
+            list_covar.append("LU_prop_%s"%cl)
     if(distance_to != ''):
         list_covar.append(distance_to.split("@")[0]+"_mean")
 
@@ -606,19 +540,18 @@ def RandomForest(weigthing_layer_name,vector,id):
     y = df_admin['log_population_density']
 
     ## Saving covariable for prediction (independent variables)
-    x=df_admin[list_covar]  #Get a dataframe with independent variables for administratives units
-    #x.to_csv(path_or_buf=os.path.join(outputdirectory_admin,"covar_x.csv"), index=False) #Export in .csv for archive
+    x = df_admin[list_covar]  #Get a dataframe with independent variables for administratives units
 
     # Remove features whose importance is less than a threshold (Feature selection)
-    rfmodel=RandomForestRegressor(n_estimators = 500, oob_score = True, max_features='auto', n_jobs=-1)
-    a=SelectFromModel(rfmodel, threshold=min_fimportance)
-    fited=a.fit(x, y)
+    rfmodel = RandomForestRegressor(n_estimators = 500, oob_score = True, max_features='auto', n_jobs=-1)
+    a = SelectFromModel(rfmodel, threshold=min_fimportance)
+    fited = a.fit(x, y)
     feature_idx = fited.get_support()   # Get list of True/False values according to the fact the OOB score of the covariate is upper the threshold 
     list_covar = list(x.columns[feature_idx])  # Update list of covariates with the selected features 
-    x=fited.transform(x)  # Replace the dataframe with the selected features
-    message="Selected covariates for the random forest model (with feature importance upper than {value} %) : \n".format(value=min_fimportance*100)  # Print the selected covariates for the model
-    message+="\n".join(list_covar)
-    log_text+=message+'\n\n'
+    x = fited.transform(x)  # Replace the dataframe with the selected features
+    message = "Selected covariates for the random forest model (with feature importance upper than {value} %) : \n".format(value=min_fimportance*100)  # Print the selected covariates for the model
+    message += "\n".join(list_covar)
+    log_text += message+'\n\n'
     
     #### Tuning of hyperparameters for the Random Forest regressor using "Grid search"
     # Instantiate the grid search model
@@ -731,7 +664,7 @@ def RandomForest(weigthing_layer_name,vector,id):
     print message
 
 def main():
-    global TMP_MAPS, TMP_CSV, vector, min_fimportance, param_grid, kfold, gridded_vector, Land_cover, Land_use, distance_to, tile_size, n_jobs, id, population, built_up, output, plot, log_file, log_text, log_text_extend, nsres, ewres, lc_classes_list, lu_classes_list, lc_class_name, lu_class_name
+    global TMP_MAPS, TMP_CSV, vector, allstatfile, min_fimportance, param_grid, kfold, gridded_vector, Land_cover, Land_use, distance_to, tile_size, n_jobs, id, population, built_up, output, plot, log_file, log_text, log_text_extend, nsres, ewres, lc_classes_list, lu_classes_list, lc_class_name, lu_class_name
     TMP_MAPS = []
     TMP_CSV = []
     start_time=time.ctime()
@@ -851,7 +784,19 @@ def main():
         message = _("You first need to install the addon i.segment.stats.\n")
         message += _(" You can install the addon with 'g.extension i.segment.stats'")
         gscript.fatal(message)
-
+    
+    # Check if r.zonal.classes is well installed
+    if not gscript.find_program('r.zonal.classes', '--help'):
+        message = _("You first need to install the addon r.zonal.classes.\n")
+        message += _(" You can install the addon with 'g.extension r.zonal.classes'")
+        gscript.fatal(message)
+        
+    ## Create a dictionnary that will contain the paths of intermediate files with statistics
+    tmp_stat_files = {}
+    
+    ## Create a dictionnary that will contain the paths of files resulting of the join of intermediates files
+    allstatfile = {}
+    
     ## Create temporary directory(-ies) for output
     create_tempdirs()
 
@@ -882,64 +827,64 @@ def main():
         log_text+=message+'\n'
         print message
 
-    ## Compute proportion of each class of categorical raster (parallel processing).
-    #for landcover
+    ## Compute proportion of each class of categorical raster.
+    gscript.message('Start extraction of statistics per grid and admin unit...')
+    ## Categorical raster A 
     gscript.run_command('g.region', raster=Land_cover.split("@")[0])  #Set the region to match the extend of the raster
-    p=Pool(n_jobs) #Create a 'pool' of processes and launch them using 'map' function
-    func=partial(proportion_class,Land_cover.split("@")[0]) # Set fixed argument of the function
-    output=p.map(func,lc_classes_list) # Launch the processes for as many items in the list (if function with a return, the returned results are ordered thanks to 'map' function)
-    p.close()
-    p.join()
-    temp_rasterlist,temp_csvlist_1,temp_csvlist_2=zip(*output)
-    [TMP_MAPS.append(x) for x in temp_rasterlist]  # Append the name of binary rasters to the list of temporary maps
-    [TMP_CSV.append(x) for x in temp_csvlist_1]  # Append the paths to .csv files to the list of temporary .csv
-    [TMP_CSV.append(x) for x in temp_csvlist_2]  # Append the paths to .csv files to the list of temporary .csv
-
-    #for landuse
+    tmp_stat_files['grid_A'] = gscript.tempfile()
+    TMP_CSV.append(tmp_stat_files['grid_A'])
+    compute_proportion_csv(Land_cover.split("@")[0], 'clumped_grid', 'LC', tmp_stat_files['grid_A'])
+    tmp_stat_files['admin_A'] = gscript.tempfile()
+    TMP_CSV.append(tmp_stat_files['admin_A'])
+    compute_proportion_csv(Land_cover.split("@")[0], 'gridded_admin_units', 'LC', tmp_stat_files['admin_A'])
+    ## Categorical raster B 
     if(Land_use != '' ):
         gscript.run_command('g.region', raster=Land_use.split("@")[0])  #Set the region to match the extend of the raster
-        p=Pool(n_jobs) #Create a 'pool' of processes and launch them using 'map' function
-        func=partial(proportion_class,Land_use.split("@")[0]) # Set fixed argument of the function
-        output=p.map(func,lu_classes_list) # Launch the processes for as many items in the list (if function with a return, the returned results are ordered thanks to 'map' function)
-        p.close()
-        p.join()
-        temp_rasterlist,temp_csvlist_1,temp_csvlist_2=zip(*output)
-        [TMP_MAPS.append(x) for x in temp_rasterlist]  # Append the name of binary rasters to the list of temporary maps
-        [TMP_CSV.append(x) for x in temp_csvlist_1]  # Append the paths to .csv files to the list of temporary .csv
-        [TMP_CSV.append(x) for x in temp_csvlist_2]  # Append the paths to .csv files to the list of temporary .csv
+        tmp_stat_files['grid_B'] = gscript.tempfile()
+        TMP_CSV.append(tmp_stat_files['grid_B'])
+        compute_proportion_csv(Land_use.split("@")[0], 'clumped_grid', 'LU', tmp_stat_files['grid_B'])
+        tmp_stat_files['admin_B'] = gscript.tempfile()
+        TMP_CSV.append(tmp_stat_files['admin_B'])
+        compute_proportion_csv(Land_use.split("@")[0], 'gridded_admin_units', 'LU', tmp_stat_files['admin_B'])
 
-    ## Compute mean distance to places of interest
+    ## Compute mean value for quatitative raster
     if(distance_to !=''):
         # For grids
-        grid_stat_output=os.path.join(outputdirectory_grid,"mean_dist.csv")
-        TMP_CSV.append(grid_stat_output)
-        gscript.run_command('i.segment.stats', quiet=True, overwrite=True, map='clumped_grid', area_measures="", rasters=distance_to.split("@")[0], raster_statistics='mean', csvfile=grid_stat_output, separator='comma')
+        tmp_stat_files['grid_C'] = gscript.tempfile()
+        TMP_CSV.append(tmp_stat_files['grid_C'])
+        gscript.run_command('i.segment.stats', quiet=True, overwrite=True, flags='sc', map='clumped_grid', 
+                            rasters=distance_to.split("@")[0], raster_statistics='mean', 
+                            csvfile=tmp_stat_files['grid_C'], separator='comma')
         # For administrative zones
-        admin_stat_output=os.path.join(outputdirectory_admin,"mean_dist.csv")
-        TMP_CSV.append(admin_stat_output)
-        gscript.run_command('i.segment.stats', quiet=True, overwrite=True, map='gridded_admin_units', area_measures="", rasters=distance_to.split("@")[0], raster_statistics='mean', csvfile=admin_stat_output, separator='comma')
+        tmp_stat_files['admin_C'] = gscript.tempfile()
+        TMP_CSV.append(tmp_stat_files['admin_C'])
+        gscript.run_command('i.segment.stats', quiet=True, overwrite=True, flags='sc', map='gridded_admin_units', 
+                            rasters=distance_to.split("@")[0], raster_statistics='mean', 
+                            csvfile=tmp_stat_files['admin_C'], separator='comma')
         # Save log
         log_text+='Distance raster used : '+str(distance_to)+'\n\n'
-
+    gscript.message('... extraction of statistics finished.')
+    
     ## Join .csv files of statistics
-    for directory in [outputdirectory_grid, outputdirectory_admin]:
-        allstatfile=os.path.join(directory,"all_stats.csv")
-        pattern_A="LC_*_prop.csv"   #Add all csv with proportions of Land cover classes
-        pattern_B=""
-        pattern_C=""
-        if(Land_use != '' ):
-            pattern_B="LU_*_prop.csv"  #Add all csv with proportions of Land use classes
-        if distance_to !='':
-            pattern_C="mean_*.csv"     #Add mean distance to amenity if the option was used
-        list_paths=ordered_list_of_path(directory,pattern_A,pattern_B,pattern_C)  #Get ordered list of path
-        join_multiplecsv(list_paths,allstatfile,separator=",",join='inner', fillempty='NULL', overwrite=True)
+    for zone in ['grid','admin']:
+        allstatfile[zone] = gscript.tempfile()
+        list_paths = [tmp_stat_files['%s_A'%zone],] 
+        if(Land_use != '' ):        #Add all csv with proportions of Land use classes
+            list_paths.append(tmp_stat_files['%s_B'%zone])
+        if distance_to !='':        #Add mean distance to amenity if the option was used
+            list_paths.append(tmp_stat_files['%s_C'%zone]) 
+        join_multiplecsv(list_paths,allstatfile[zone],separator=",",join='inner', fillempty='0.000', overwrite=True)
 
     ## Random Forest
+    gscript.message('Start Random forest model training and prediction...')
     RandomForest(output_weighting_layer,vector.split("@")[0],id)
-
+    gscript.message('... predictions of weights using Random forest finished.')
+    
     ## Export the log file
     end_time=time.ctime()
-    logging=open(log_file+'.txt', 'w')
+    path, ext = os.path.splitext(log_file)
+    if ext != '.txt': log_file = log_file+'.txt'
+    logging=open(log_file, 'w')
     logging.write('Log file of r.population.density\n')
     logging.write('Run started on '+str(start_time)+' and finished on '+str(end_time)+'\n')
     logging.write('Selected spatial resolution for weighting layer : '+tile_size+' meters\n')
@@ -955,4 +900,3 @@ if __name__ == "__main__":
     options, flags = gscript.parser()
     atexit.register(cleanup)
     main()
-
