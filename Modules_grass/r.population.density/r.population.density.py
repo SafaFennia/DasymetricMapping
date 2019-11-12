@@ -205,21 +205,6 @@ def cleanup():
         if os.path.isfile(tmp_csv):
             os.remove(tmp_csv)
 
-def create_tempdirs():
-    '''
-    Function that create needed temporary folder. Those name have to be saved as other function will depend of the name of those folder.
-    '''
-    # Temporary directory for administrative units statistics
-    global outputdirectory_admin
-    tmp_grass_dir=gscript.tempdir()
-    outputdirectory_admin=os.path.join(tmp_grass_dir,"admin_level")
-    if not os.path.exists(outputdirectory_admin):
-        os.makedirs(outputdirectory_admin)
-    # Temporary directory for grids statistics
-    global outputdirectory_grid
-    outputdirectory_grid=os.path.join(tmp_grass_dir,"grid_level")
-    if not os.path.exists(outputdirectory_grid):
-        os.makedirs(outputdirectory_grid)
 
 def Data_prep(categorical_raster):
     '''
@@ -325,28 +310,6 @@ def natural_keys(text):   #Return key to be used for sorting string containing n
     import re  #Import needed library
     return [ atoi(c) for c in re.split('(\d+)', text) ]  #Split the string
 
-
-def ordered_list_of_path(indir,pattern_A,pattern_B="",pattern_C=""):
-    '''
-    Function that return a list of ordered path for the files in the folder 'indir'.
-    'pattern_A', 'pattern_B', 'pattern_C'
-    '''
-    # Make a list of .csv files according to their filename pattern
-    os.chdir(indir) # Change the current directory to the folder containing all the .csv files
-    csvList=glob.glob(pattern_A) #Make a list of strings with the name of .csv files
-    csvList.sort(key=natural_keys) #Sort the list on a human natural order (for strings containing numericals)
-    if pattern_B !="":
-        csvList_B=glob.glob(pattern_B) #Make a list of strings with the name of .csv files
-        csvList_B.sort(key=natural_keys) #Sort the list on a human natural order (for strings containing numericals)
-        for item in csvList_B:
-            csvList.append(item)
-    if pattern_C !="":
-        csvList_C=glob.glob(pattern_C) #Make a list of strings with the name of .csv files
-        csvList_C.sort(key=natural_keys) #Sort the list on a human natural order (for strings containing numericals)
-        for item in csvList_C:
-            csvList.append(item)
-    return csvList
-
             
 def join_2csv(file1,file2,separator=";",join='inner',fillempty='NULL'):
     '''
@@ -399,9 +362,9 @@ def join_2csv(file1,file2,separator=";",join='inner',fillempty='NULL'):
             [new_row.append('%s'%fillempty) for x in header_list2]
         new_content.append(new_row)
     #Return the result
-    outfile=gscript.tempfile()
-    fout=open(outfile,"w")
-    writer=csv.writer(fout, delimiter=separator)
+    outfile = gscript.tempfile()
+    fout = open(outfile,"w")
+    writer = csv.writer(fout, delimiter=separator)
     writer.writerows(new_content) #Write multiples rows in the file
     time.sleep(0.5) # To be sure the file will not be close to fast (the content could be uncompletly filled) 
     fout.close()
@@ -574,20 +537,20 @@ def RandomForest(weigthing_layer_name,vector,id):
     print message
     # Print info of the mean cross-validated score (OOB) and stddev of the best_estimator
     best_score=grid_search.cv_results_['mean_test_score'][grid_search.best_index_]
-    best_std=grid_search.cv_results_['std_test_score'][grid_search.best_index_]
-    message="Mean cross-validated score (OOB) and stddev of the best_estimator : %0.3f (+/-%0.3f)"%(best_score,best_std)+'\n'
-    log_text+=message+'\n'
+    best_std = grid_search.cv_results_['std_test_score'][grid_search.best_index_]
+    message = "Mean cross-validated score (OOB) and stddev of the best_estimator : %0.3f (+/-%0.3f)"%(best_score,best_std)+'\n'
+    log_text += message+'\n'
     print message
     # Print mean OOB and stddev for each set of parameters
     means = grid_search.cv_results_['mean_test_score']
     stds = grid_search.cv_results_['std_test_score']
-    message="Mean cross-validated score (OOB) and stddev for every tested set of parameter :\n"
+    message = "Mean cross-validated score (OOB) and stddev for every tested set of parameter :\n"
     for mean, std, params in zip(means, stds, grid_search.cv_results_['params']):
-        message+="%0.3f (+/-%0.03f) for %r"% (mean, std, params)+'\n'
-    log_text_extend+=message
+        message += "%0.3f (+/-%0.03f) for %r"% (mean, std, params)+'\n'
+    log_text_extend += message
     
     # Predict on grids
-    x_grid=df_grid[list_covar] #Get a dataframe with independent variables for grids (remaining after feature selection)
+    x_grid = df_grid[list_covar] #Get a dataframe with independent variables for grids (remaining after feature selection)
     #x_grid.to_csv(path_or_buf=os.path.join(outputdirectory_grid,"covar_x_grid.csv"), index=False) #Export in .csv for archive
     prediction = regressor.predict(x_grid)  # Apply the model on grid values
 
@@ -597,24 +560,24 @@ def RandomForest(weigthing_layer_name,vector,id):
     df_weight = pd.concat((df1,df2), axis=1)
     col = df_weight.apply(lambda row : np.exp(row["log"]), axis=1)
     df_weight ["weight_after_log"] = col
-    weightcsv=os.path.join(outputdirectory_grid,"weight.csv")
+    weightcsv = os.path.join(outputdirectory_grid,"weight.csv")
     #df_weight.to_csv(path_or_buf=weightcsv) #Export in .csv for archive
 
     ## Define a reclassification rule
-    cat_list=df_weight['cat'].tolist()
-    weight_list=df_weight['weight_after_log'].tolist()
-    rule=""
+    cat_list = df_weight['cat'].tolist()
+    weight_list = df_weight['weight_after_log'].tolist()
+    rule = ""
     for i, cat in enumerate(cat_list):
-        rule+=str(cat)
-        rule+="="
-        rule+=str(int(round(weight_list[i]*1000000000,0)))  #reclass rule of r.reclass requier INTEGER but random forest prediction could be very low values.
-        rule+="\n"
-    rule+="*"
-    rule+="="
-    rule+="NULL"
+        rule += str(cat)
+        rule += "="
+        rule += str(int(round(weight_list[i]*1000000000,0)))  #reclass rule of r.reclass requier INTEGER but random forest prediction could be very low values.
+        rule += "\n"
+    rule += "*"
+    rule += "="
+    rule += "NULL"
 
     ## Create a temporary 'weight_reclass_rules.csv' file for r.reclass
-    outputcsv=os.path.join(outputdirectory_grid,"weight_reclass_rules.csv")
+    outputcsv = gscript.tempfile()
     TMP_CSV.append(outputcsv)
     f = open(outputcsv, 'w')
     f.write(rule)
@@ -715,7 +678,7 @@ def main():
 
     # is id column numeric?
     coltype = gscript.vector_columns(vector)[id]['type']
-    if coltype not in ('INTEGER'):
+    if coltype not in ('INTEGER', 'DOUBLE PRECISION'):
         gscript.fatal(_("<%s> column must be Integer")% (id))
 
     # population column exists ?
@@ -796,9 +759,6 @@ def main():
     
     ## Create a dictionnary that will contain the paths of files resulting of the join of intermediates files
     allstatfile = {}
-    
-    ## Create temporary directory(-ies) for output
-    create_tempdirs()
 
     ## Creating a empty grid raster: each grid has a size corresponding to the "tile_size" parameter
     create_clumped_grid(tile_size)
