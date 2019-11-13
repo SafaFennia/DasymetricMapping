@@ -551,7 +551,6 @@ def RandomForest(weigthing_layer_name,vector,id):
     
     # Predict on grids
     x_grid = df_grid[list_covar] #Get a dataframe with independent variables for grids (remaining after feature selection)
-    #x_grid.to_csv(path_or_buf=os.path.join(outputdirectory_grid,"covar_x_grid.csv"), index=False) #Export in .csv for archive
     prediction = regressor.predict(x_grid)  # Apply the model on grid values
 
     # Save the prediction
@@ -560,8 +559,6 @@ def RandomForest(weigthing_layer_name,vector,id):
     df_weight = pd.concat((df1,df2), axis=1)
     col = df_weight.apply(lambda row : np.exp(row["log"]), axis=1)
     df_weight ["weight_after_log"] = col
-    weightcsv = os.path.join(outputdirectory_grid,"weight.csv")
-    #df_weight.to_csv(path_or_buf=weightcsv) #Export in .csv for archive
 
     ## Define a reclassification rule
     cat_list = df_weight['cat'].tolist()
